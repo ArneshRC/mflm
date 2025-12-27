@@ -107,6 +107,8 @@ struct LoginManager<'a> {
     row_h: u32,
     password_char: String,
     text_align: settings::TextAlign,
+    session_left_arrow: String,
+    session_right_arrow: String,
 
     screen_size: (u32, u32),
     dimensions: (u32, u32),
@@ -178,6 +180,9 @@ impl<'a> LoginManager<'a> {
             password_char.to_string()
         };
 
+        let session_left_arrow = ui.session_left_arrow.trim().to_string();
+        let session_right_arrow = ui.session_right_arrow.trim().to_string();
+
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
@@ -190,6 +195,8 @@ impl<'a> LoginManager<'a> {
             row_h: ui.row_h,
             password_char,
             text_align: ui.text_align,
+            session_left_arrow,
+            session_right_arrow,
             screen_size,
             dimensions,
             mode,
@@ -228,11 +235,13 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Configured ui: gap_px={} row_h={} password_char={:?} text_align={:?}",
+                "Configured ui: gap_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
                 s.ui.gap_px,
                 s.ui.row_h,
                 s.ui.password_char,
-                s.ui.text_align
+                s.ui.text_align,
+                s.ui.form_width,
+                s.ui.form_height
             );
             s
         }
@@ -249,11 +258,13 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Default ui: gap_px={} row_h={} password_char={:?} text_align={:?}",
+                "Default ui: gap_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
                 s.ui.gap_px,
                 s.ui.row_h,
                 s.ui.password_char,
-                s.ui.text_align
+                s.ui.text_align,
+                s.ui.form_width,
+                s.ui.form_height
             );
             s
         }
@@ -343,7 +354,7 @@ fn main() {
     let mut lm = LoginManager::new(
         &mut framebuffer,
         (w, h),
-        (1024, 168),
+        (settings.ui.form_width, settings.ui.form_height),
         greetd,
         targets,
         &settings.fonts,

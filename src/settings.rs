@@ -81,6 +81,22 @@ fn default_text_align() -> TextAlign {
     TextAlign::Center
 }
 
+fn default_form_width() -> u32 {
+    512
+}
+
+fn default_form_height() -> u32 {
+    168
+}
+
+fn default_session_left_arrow() -> String {
+    "❮".to_string()
+}
+
+fn default_session_right_arrow() -> String {
+    "❯".to_string()
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TextAlign {
@@ -98,10 +114,24 @@ pub struct Ui {
     pub row_h: u32,
 
     #[serde(default = "default_password_char")]
+    #[serde(alias = "password-char")]
+    #[serde(alias = "passwordChar")]
     pub password_char: String,
 
     #[serde(default = "default_text_align")]
-    pub text_align: TextAlign
+    pub text_align: TextAlign,
+
+    #[serde(default = "default_form_width")]
+    pub form_width: u32,
+
+    #[serde(default = "default_form_height")]
+    pub form_height: u32,
+
+    #[serde(default = "default_session_left_arrow")]
+    pub session_left_arrow: String,
+
+    #[serde(default = "default_session_right_arrow")]
+    pub session_right_arrow: String
 }
 
 impl Default for Ui {
@@ -110,7 +140,11 @@ impl Default for Ui {
             gap_px: default_gap_px(),
             row_h: default_row_h(),
             password_char: default_password_char(),
-            text_align: default_text_align()
+            text_align: default_text_align(),
+            form_width: default_form_width(),
+            form_height: default_form_height(),
+            session_left_arrow: default_session_left_arrow(),
+            session_right_arrow: default_session_right_arrow()
         }
     }
 }
@@ -146,6 +180,10 @@ impl Settings {
             .set_default("ui.row_h", default_row_h())?
             .set_default("ui.password_char", default_password_char())?
             .set_default("ui.text_align", "center")?
+            .set_default("ui.form_width", default_form_width())?
+            .set_default("ui.form_height", default_form_height())?
+            .set_default("ui.session_left_arrow", default_session_left_arrow())?
+            .set_default("ui.session_right_arrow", default_session_right_arrow())?
             .add_source(
                 config::File::from(std::path::Path::new(
                     "/etc/mflm/config.toml"

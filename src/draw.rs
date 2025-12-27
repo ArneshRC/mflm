@@ -172,7 +172,7 @@ impl crate::LoginManager<'_> {
         color: &Color
     ) {
         let thickness = 4u32.min(row_h.max(1));
-        let underline_w = (row_w / 2).max(16).min(row_w);
+        let underline_w = (row_w).max(16).min(row_w);
         let start_x = (row_w.saturating_sub(underline_w)) / 2;
         let start_y = row_h.saturating_sub(thickness);
 
@@ -273,12 +273,19 @@ impl crate::LoginManager<'_> {
             self.colors.foreground
         };
 
-        self.prompt_font.auto_draw_text_centered(
-            &mut buf,
-            &bg,
-            &fg,
-            &self.targets[self.target_index].name
-        )?;
+        let session_name = &self.targets[self.target_index].name;
+        let text = match (
+            self.session_left_arrow.as_str(),
+            self.session_right_arrow.as_str()
+        ) {
+            ("", "") => session_name.to_string(),
+            (l, "") => format!("{l}  {session_name}"),
+            ("", r) => format!("{session_name}  {r}"),
+            (l, r) => format!("{l}  {session_name}  {r}")
+        };
+
+        self.prompt_font
+            .auto_draw_text_centered(&mut buf, &bg, &fg, &text)?;
 
         self.should_refresh = true;
 
