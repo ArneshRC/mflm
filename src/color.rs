@@ -3,27 +3,28 @@ pub struct Color {
     red: f32,
     green: f32,
     blue: f32,
-    opacity: f32,
+    opacity: f32
 }
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ParseColorError {
-    #[error("invalid hex color length ({len}); expected 6 (RRGGBB) or 8 (AARRGGBB)")]
+    #[error(
+        "invalid hex color length ({len}); expected 6 (RRGGBB) or 8 (AARRGGBB)"
+    )]
     InvalidLength { len: usize },
 
     #[error("invalid hex color: {0}")]
-    InvalidHex(String),
+    InvalidHex(String)
 }
 
 impl Color {
-
     pub fn from_rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self {
             red: (r as f32) / 255.0,
             green: (g as f32) / 255.0,
             blue: (b as f32) / 255.0,
-            opacity: (a as f32) / 255.0,
+            opacity: (a as f32) / 255.0
         }
     }
 
@@ -51,7 +52,7 @@ impl Color {
                     .map_err(|_| ParseColorError::InvalidHex(s.to_string()))?;
                 Ok(Self::from_rgba_u8(r, g, b, a))
             }
-            len => Err(ParseColorError::InvalidLength { len }),
+            len => Err(ParseColorError::InvalidLength { len })
         }
     }
 
@@ -61,6 +62,11 @@ impl Color {
     }
 
     pub fn as_rgba_f32(&self) -> (f64, f64, f64, f64) {
-        (self.red as f64, self.green as f64, self.blue as f64, self.opacity as f64)
+        (
+            self.red as f64,
+            self.green as f64,
+            self.blue as f64,
+            self.opacity as f64
+        )
     }
 }

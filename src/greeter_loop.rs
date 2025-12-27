@@ -7,7 +7,7 @@ impl<'a> crate::LoginManager<'a> {
         match mode {
             crate::Mode::SelectingSession => !self.lock_target,
             crate::Mode::EditingUsername => self.forced_username.is_none(),
-            crate::Mode::EditingPassword => true,
+            crate::Mode::EditingPassword => true
         }
     }
 
@@ -17,7 +17,7 @@ impl<'a> crate::LoginManager<'a> {
             cur = match cur {
                 crate::Mode::SelectingSession => crate::Mode::EditingUsername,
                 crate::Mode::EditingUsername => crate::Mode::EditingPassword,
-                crate::Mode::EditingPassword => crate::Mode::SelectingSession,
+                crate::Mode::EditingPassword => crate::Mode::SelectingSession
             };
             if self.mode_allowed(cur) {
                 return cur;
@@ -32,7 +32,7 @@ impl<'a> crate::LoginManager<'a> {
             cur = match cur {
                 crate::Mode::SelectingSession => crate::Mode::EditingPassword,
                 crate::Mode::EditingUsername => crate::Mode::SelectingSession,
-                crate::Mode::EditingPassword => crate::Mode::EditingUsername,
+                crate::Mode::EditingPassword => crate::Mode::EditingUsername
             };
             if self.mode_allowed(cur) {
                 return cur;
@@ -65,7 +65,8 @@ impl<'a> crate::LoginManager<'a> {
         let stdin_lock = stdin_handle.lock();
         let mut stdin_bytes = stdin_lock.bytes();
 
-        let mut read_byte = || -> Option<u8> { stdin_bytes.next().and_then(Result::ok) };
+        let mut read_byte =
+            || -> Option<u8> { stdin_bytes.next().and_then(Result::ok) };
 
         if !self.lock_target {
             if let Err(e) = self.draw_target() {
@@ -75,15 +76,23 @@ impl<'a> crate::LoginManager<'a> {
         }
 
         loop {
-            if self.forced_username.is_none() && username.len() != last_username_len {
-                if let Err(e) = self.draw_username(&username, username.len() < last_username_len) {
+            if self.forced_username.is_none()
+                && username.len() != last_username_len
+            {
+                if let Err(e) = self.draw_username(
+                    &username,
+                    username.len() < last_username_len
+                ) {
                     error!("Fatal: unable to draw username prompt: {e}");
                     return;
                 }
                 last_username_len = username.len();
             }
             if password.len() != last_password_len {
-                if let Err(e) = self.draw_password(&password, password.len() < last_password_len) {
+                if let Err(e) = self.draw_password(
+                    &password,
+                    password.len() < last_password_len
+                ) {
                     error!("Fatal: unable to draw password prompt: {e}");
                     return;
                 }
@@ -163,7 +172,7 @@ impl<'a> crate::LoginManager<'a> {
                             username.clear();
                         }
                     }
-                    crate::Mode::EditingPassword => password.clear(),
+                    crate::Mode::EditingPassword => password.clear()
                 },
                 '\x03' | '\x04' => {
                     // ctrl-c/ctrl-D
@@ -196,7 +205,9 @@ impl<'a> crate::LoginManager<'a> {
                         };
                     }
                     crate::Mode::EditingUsername => {
-                        if self.forced_username.is_none() && !username.is_empty() {
+                        if self.forced_username.is_none()
+                            && !username.is_empty()
+                        {
                             self.mode = crate::Mode::EditingPassword;
                         }
                     }
@@ -222,22 +233,28 @@ impl<'a> crate::LoginManager<'a> {
                                 .forced_username
                                 .clone()
                                 .unwrap_or_else(|| username.clone());
-                            let password_for_login = std::mem::take(&mut password);
+                            let password_for_login =
+                                std::mem::take(&mut password);
                             let res = self.greetd.login(
                                 username_for_login,
                                 password_for_login,
-                                self.targets[self.target_index].exec.clone(),
+                                self.targets[self.target_index].exec.clone()
                             );
 
                             if self.forced_username.is_none() {
-                                username = String::with_capacity(crate::USERNAME_CAP);
+                                username =
+                                    String::with_capacity(crate::USERNAME_CAP);
                             } else {
-                                username = self.forced_username.clone().unwrap();
+                                username =
+                                    self.forced_username.clone().unwrap();
                             }
-                            password = String::with_capacity(crate::PASSWORD_CAP);
+                            password =
+                                String::with_capacity(crate::PASSWORD_CAP);
                             match res {
                                 Ok(_) => {
-                                    info!("Login succeeded; exiting greeter loop");
+                                    info!(
+                                        "Login succeeded; exiting greeter loop"
+                                    );
                                     return;
                                 }
                                 Err(e) => {
@@ -247,11 +264,12 @@ impl<'a> crate::LoginManager<'a> {
                                         error!("Fatal: unable to draw background: {e}");
                                         return;
                                     }
-                                    self.mode = if self.forced_username.is_some() {
-                                        crate::Mode::EditingPassword
-                                    } else {
-                                        crate::Mode::EditingUsername
-                                    };
+                                    self.mode =
+                                        if self.forced_username.is_some() {
+                                            crate::Mode::EditingPassword
+                                        } else {
+                                            crate::Mode::EditingUsername
+                                        };
                                     if let Err(e) = self.greetd.cancel() {
                                         warn!("Failed to cancel greetd session after login failure: {e}");
                                     }
@@ -269,10 +287,11 @@ impl<'a> crate::LoginManager<'a> {
                         Some(b'C') => match self.mode {
                             crate::Mode::SelectingSession => {
                                 if !self.lock_target {
-                                    self.target_index = (self.target_index + 1) % self.targets.len()
+                                    self.target_index = (self.target_index + 1)
+                                        % self.targets.len()
                                 }
                             }
-                            _ => (), // TODO: cursor
+                            _ => () // TODO: cursor
                         },
                         Some(b'D') => match self.mode {
                             crate::Mode::SelectingSession => {
@@ -283,11 +302,11 @@ impl<'a> crate::LoginManager<'a> {
                                     self.target_index -= 1;
                                 }
                             }
-                            _ => (), // TODO: cursor
+                            _ => () // TODO: cursor
                         },
-                        _ => (), // shrug
+                        _ => () // shrug
                     },
-                    _ => (), // shrug
+                    _ => () // shrug
                 },
                 v => match self.mode {
                     crate::Mode::SelectingSession => (),
@@ -296,8 +315,8 @@ impl<'a> crate::LoginManager<'a> {
                             username.push(v as char)
                         }
                     }
-                    crate::Mode::EditingPassword => password.push(v as char),
-                },
+                    crate::Mode::EditingPassword => password.push(v as char)
+                }
             }
             self.refresh();
         }

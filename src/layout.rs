@@ -7,7 +7,7 @@ pub(crate) struct FormLayout {
     pub(crate) total_h: u32,
     pub(crate) session_y: Option<u32>,
     pub(crate) username_y: Option<u32>,
-    pub(crate) password_y: u32,
+    pub(crate) password_y: u32
 }
 
 impl<'a> crate::LoginManager<'a> {
@@ -54,7 +54,7 @@ impl<'a> crate::LoginManager<'a> {
             total_h,
             session_y,
             username_y,
-            password_y,
+            password_y
         }
     }
 }

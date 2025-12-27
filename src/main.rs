@@ -1,9 +1,6 @@
 #![deny(rust_2018_idioms)]
 
-use std::fs::OpenOptions;
-use std::fs;
-use std::io;
-use std::path::Path;
+use std::{fs, fs::OpenOptions, io, path::Path};
 
 use chrono::Local;
 use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
@@ -23,8 +20,8 @@ const FB_ACTIVATE_FORCE: u32 = 128;
 mod buffer;
 mod color;
 mod draw;
-mod greeter_loop;
 mod greetd;
+mod greeter_loop;
 mod layout;
 mod settings;
 
@@ -32,7 +29,7 @@ mod settings;
 enum Mode {
     SelectingSession,
     EditingUsername,
-    EditingPassword,
+    EditingPassword
 }
 
 #[derive(Error, Debug)]
@@ -43,12 +40,12 @@ enum Error {
     #[error("Error performing draw operation: {0}")]
     Draw(#[from] draw::DrawError),
     #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[from] std::io::Error)
 }
 
 struct Target {
     name: String,
-    exec: Vec<String>,
+    exec: Vec<String>
 }
 
 impl Target {
@@ -117,7 +114,7 @@ struct LoginManager<'a> {
     target_index: usize,
 
     var_screen_info: &'a VarScreeninfo,
-    should_refresh: bool,
+    should_refresh: bool
 }
 
 impl<'a> LoginManager<'a> {
@@ -129,7 +126,7 @@ impl<'a> LoginManager<'a> {
         targets: Vec<Target>,
         fonts: &settings::Fonts,
         colors: settings::ResolvedColors,
-        login: &settings::Login,
+        login: &settings::Login
     ) -> Self {
         let forced_username = login
             .username
@@ -144,7 +141,8 @@ impl<'a> LoginManager<'a> {
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            Some(forced) => match targets.iter().position(|t| t.name == forced) {
+            Some(forced) => match targets.iter().position(|t| t.name == forced)
+            {
                 Some(i) => {
                     info!("Forcing target session from config: {forced:?}");
                     (i, true)
@@ -156,7 +154,7 @@ impl<'a> LoginManager<'a> {
                     (0, false)
                 }
             },
-            None => (0, false),
+            None => (0, false)
         };
 
         if let Some(u) = forced_username.as_deref() {
@@ -187,7 +185,7 @@ impl<'a> LoginManager<'a> {
             targets,
             target_index, // TODO: remember last user selection
             var_screen_info: &fb.var_screen_info,
-            should_refresh: false,
+            should_refresh: false
         }
     }
 }
@@ -196,7 +194,9 @@ fn main() {
     if let Err(e) = init_logging() {
         // If the log file can't be opened (permissions, missing /var, etc), we
         // can't reliably provide the requested file logging.
-        eprintln!("Failed to initialize file logger (/var/log/mflm/mflm.log): {e}");
+        eprintln!(
+            "Failed to initialize file logger (/var/log/mflm/mflm.log): {e}"
+        );
         return;
     }
 
@@ -206,7 +206,10 @@ fn main() {
     let settings = match settings::Settings::load() {
         Ok(s) => {
             info!("Loaded configuration successfully");
-            debug!("Configured fonts: main={:?}, mono={:?}", s.fonts.main, s.fonts.mono);
+            debug!(
+                "Configured fonts: main={:?}, mono={:?}",
+                s.fonts.main, s.fonts.mono
+            );
             debug!(
                 "Configured login: target={:?} username={:?} gap_px={}, row_h={}",
                 s.login.target,
@@ -219,13 +222,13 @@ fn main() {
         Err(e) => {
             warn!("Failed to load config; using defaults: {e}");
             let s = settings::Settings::default();
-            debug!("Default fonts: main={:?}, mono={:?}", s.fonts.main, s.fonts.mono);
+            debug!(
+                "Default fonts: main={:?}, mono={:?}",
+                s.fonts.main, s.fonts.mono
+            );
             debug!(
                 "Default login: target={:?} username={:?} gap_px={}, row_h={}",
-                s.login.target,
-                s.login.username,
-                s.login.gap_px,
-                s.login.row_h
+                s.login.target, s.login.username, s.login.gap_px, s.login.row_h
             );
             s
         }
@@ -320,7 +323,7 @@ fn main() {
         targets,
         &settings.fonts,
         colors,
-        &settings.login,
+        &settings.login
     );
 
     lm.clear();
@@ -345,7 +348,10 @@ fn init_logging() -> Result<(), io::Error> {
     let log_path = log_dir.join("mflm.log");
 
     fs::create_dir_all(log_dir)?;
-    let file = OpenOptions::new().create(true).append(true).open(&log_path)?;
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)?;
 
     // Debug = verbose. Simplelog's default config includes timestamps; we also
     // log a clear startup banner with full date/time.

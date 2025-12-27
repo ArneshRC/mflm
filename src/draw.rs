@@ -1,5 +1,7 @@
-use crate::buffer::{Buffer, BufferError};
-use crate::color::Color;
+use crate::{
+    buffer::{Buffer, BufferError},
+    color::Color
+};
 
 use cairo::{Context, Format, ImageSurface};
 use pangocairo::functions as pangocairo;
@@ -12,12 +14,12 @@ pub enum DrawError {
     Buffer(#[from] BufferError),
 
     #[error("cairo/pango error: {0}")]
-    Render(String),
+    Render(String)
 }
 
 pub struct Font {
     desc: pango::FontDescription,
-    size_px: f32,
+    size_px: f32
 }
 
 impl Font {
@@ -28,7 +30,7 @@ impl Font {
         font_desc.set_absolute_size((size_px as f64) * (pango::SCALE as f64));
         Font {
             desc: font_desc,
-            size_px,
+            size_px
         }
     }
 
@@ -37,14 +39,16 @@ impl Font {
         bg: &Color,
         fg: &Color,
         text: &str,
-        width_px: i32,
+        width_px: i32
     ) -> Result<(ImageSurface, i32, i32), DrawError> {
         let width_px = width_px.max(1);
 
-        let tmp = ImageSurface::create(Format::ARgb32, 1, 1)
-            .map_err(|e| DrawError::Render(format!("failed to create cairo surface: {e:?}")))?;
-        let tmp_ctx = Context::new(&tmp)
-            .map_err(|e| DrawError::Render(format!("failed to create cairo context: {e:?}")))?;
+        let tmp = ImageSurface::create(Format::ARgb32, 1, 1).map_err(|e| {
+            DrawError::Render(format!("failed to create cairo surface: {e:?}"))
+        })?;
+        let tmp_ctx = Context::new(&tmp).map_err(|e| {
+            DrawError::Render(format!("failed to create cairo context: {e:?}"))
+        })?;
 
         let layout = pangocairo::create_layout(&tmp_ctx);
         layout.set_font_description(Some(&self.desc));
@@ -55,14 +59,20 @@ impl Font {
         h = h.max(1);
 
         let surface = ImageSurface::create(Format::ARgb32, width_px, h)
-            .map_err(|e| DrawError::Render(format!("failed to create cairo surface: {e:?}")))?;
-        let ctx = Context::new(&surface)
-            .map_err(|e| DrawError::Render(format!("failed to create cairo context: {e:?}")))?;
+            .map_err(|e| {
+                DrawError::Render(format!(
+                    "failed to create cairo surface: {e:?}"
+                ))
+            })?;
+        let ctx = Context::new(&surface).map_err(|e| {
+            DrawError::Render(format!("failed to create cairo context: {e:?}"))
+        })?;
 
         let (br, bgc, bb, ba) = bg.as_rgba_f32();
         ctx.set_source_rgba(br, bgc, bb, ba);
-        ctx.paint()
-            .map_err(|e| DrawError::Render(format!("failed to paint background: {e:?}")))?;
+        ctx.paint().map_err(|e| {
+            DrawError::Render(format!("failed to paint background: {e:?}"))
+        })?;
 
         let layout = pangocairo::create_layout(&ctx);
         layout.set_font_description(Some(&self.desc));
@@ -82,18 +92,21 @@ impl Font {
         buf: &mut Buffer<'_>,
         bg: &Color,
         c: &Color,
-        s: &str,
+        s: &str
     ) -> Result<(u32, u32), DrawError> {
         let bounds = buf.get_bounds();
         let width_px = bounds.2 as i32;
 
-        let (mut surface, w, h) = self.render_to_surface_centered(bg, c, s, width_px)?;
+        let (mut surface, w, h) =
+            self.render_to_surface_centered(bg, c, s, width_px)?;
         surface.flush();
 
         let stride = surface.stride() as usize;
-        let data = surface
-            .data()
-            .map_err(|e| DrawError::Render(format!("failed to access cairo surface data: {e:?}")))?;
+        let data = surface.data().map_err(|e| {
+            DrawError::Render(format!(
+                "failed to access cairo surface data: {e:?}"
+            ))
+        })?;
 
         let bounds = buf.get_bounds();
         let max_w = (w as u32).min(bounds.2);
@@ -123,9 +136,12 @@ impl<'a> crate::LoginManager<'a> {
         if self.should_refresh {
             self.should_refresh = false;
             let mut screeninfo = self.var_screen_info.clone();
-            screeninfo.activate |= crate::FB_ACTIVATE_NOW | crate::FB_ACTIVATE_FORCE;
-            if let Err(e) = framebuffer::Framebuffer::put_var_screeninfo(self.device, &screeninfo)
-            {
+            screeninfo.activate |=
+                crate::FB_ACTIVATE_NOW | crate::FB_ACTIVATE_FORCE;
+            if let Err(e) = framebuffer::Framebuffer::put_var_screeninfo(
+                self.device,
+                &screeninfo
+            ) {
                 log::error!("Failed to refresh framebuffer: {e}");
             }
         }
@@ -137,7 +153,12 @@ impl<'a> crate::LoginManager<'a> {
         self.should_refresh = true;
     }
 
-    fn draw_underline(row: &mut crate::buffer::Buffer<'_>, row_w: u32, row_h: u32, color: &Color) {
+    fn draw_underline(
+        row: &mut crate::buffer::Buffer<'_>,
+        row_w: u32,
+        row_h: u32,
+        color: &Color
+    ) {
         let thickness = 4u32.min(row_h.max(1));
         let underline_w = (row_w / 2).max(16).min(row_w);
         let start_x = (row_w.saturating_sub(underline_w)) / 2;
@@ -150,20 +171,29 @@ impl<'a> crate::LoginManager<'a> {
         }
     }
 
-    pub(crate) fn draw_bg(&mut self, box_color: &Color) -> Result<(), crate::Error> {
+    pub(crate) fn draw_bg(
+        &mut self,
+        box_color: &Color
+    ) -> Result<(), crate::Error> {
         let layout = self.form_layout();
         let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
         let bg = self.colors.background;
         let fg = self.colors.foreground;
 
-        let form_fill = if box_color.as_argb8888() == self.colors.neutral.as_argb8888() {
-            bg
-        } else {
-            *box_color
-        };
+        let form_fill =
+            if box_color.as_argb8888() == self.colors.neutral.as_argb8888() {
+                bg
+            } else {
+                *box_color
+            };
 
         {
-            let mut form = buf.subdimensions((layout.x, layout.y, layout.w, layout.total_h))?;
+            let mut form = buf.subdimensions((
+                layout.x,
+                layout.y,
+                layout.w,
+                layout.total_h
+            ))?;
             form.memset(&form_fill);
         }
 
@@ -173,12 +203,17 @@ impl<'a> crate::LoginManager<'a> {
             &mut buf.offset((0, 32))?,
             &bg,
             &fg,
-            &format!("Welcome to {hostname}"),
+            &format!("Welcome to {hostname}")
         )?;
 
         // Underlines (username/password). Selected field uses selected color.
         if let Some(y_username) = layout.username_y {
-            let mut row = buf.subdimensions((layout.x, y_username, layout.w, layout.row_h))?;
+            let mut row = buf.subdimensions((
+                layout.x,
+                y_username,
+                layout.w,
+                layout.row_h
+            ))?;
             let c = if self.mode == crate::Mode::EditingUsername {
                 self.colors.selected
             } else {
@@ -188,8 +223,12 @@ impl<'a> crate::LoginManager<'a> {
         }
 
         {
-            let mut row =
-                buf.subdimensions((layout.x, layout.password_y, layout.w, layout.row_h))?;
+            let mut row = buf.subdimensions((
+                layout.x,
+                layout.password_y,
+                layout.w,
+                layout.row_h
+            ))?;
             let c = if self.mode == crate::Mode::EditingPassword {
                 self.colors.selected
             } else {
@@ -207,11 +246,12 @@ impl<'a> crate::LoginManager<'a> {
         let layout = self.form_layout();
         let y = match layout.session_y {
             Some(y) => y,
-            None => return Ok(()),
+            None => return Ok(())
         };
 
         let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
+        let mut buf =
+            buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
         let bg = self.colors.background;
         buf.memset(&bg);
 
@@ -225,7 +265,7 @@ impl<'a> crate::LoginManager<'a> {
             &mut buf,
             &bg,
             &fg,
-            &self.targets[self.target_index].name,
+            &self.targets[self.target_index].name
         )?;
 
         self.should_refresh = true;
@@ -233,15 +273,20 @@ impl<'a> crate::LoginManager<'a> {
         Ok(())
     }
 
-    pub(crate) fn draw_username(&mut self, username: &str, redraw: bool) -> Result<(), crate::Error> {
+    pub(crate) fn draw_username(
+        &mut self,
+        username: &str,
+        redraw: bool
+    ) -> Result<(), crate::Error> {
         let layout = self.form_layout();
         let y = match layout.username_y {
             Some(y) => y,
-            None => return Ok(()),
+            None => return Ok(())
         };
 
         let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
+        let mut buf =
+            buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
         let bg = self.colors.background;
         if redraw {
             buf.memset(&bg);
@@ -268,12 +313,17 @@ impl<'a> crate::LoginManager<'a> {
         Ok(())
     }
 
-    pub(crate) fn draw_password(&mut self, password: &str, redraw: bool) -> Result<(), crate::Error> {
+    pub(crate) fn draw_password(
+        &mut self,
+        password: &str,
+        redraw: bool
+    ) -> Result<(), crate::Error> {
         let layout = self.form_layout();
         let y = layout.password_y;
 
         let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
+        let mut buf =
+            buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
         let bg = self.colors.background;
         if redraw {
             buf.memset(&bg);

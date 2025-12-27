@@ -15,13 +15,13 @@ pub enum BufferError {
     #[error("put({pos:?}) is not within subdimensions of buffer ({subdim:?})")]
     PixelOutOfSubdimBounds { pos: Vect, subdim: Rect },
     #[error("put({pos:?}) is not within dimensions of buffer ({dim:?})")]
-    PixelOutOfBounds { pos: Vect, dim: Vect },
+    PixelOutOfBounds { pos: Vect, dim: Vect }
 }
 
 pub struct Buffer<'a> {
     buf: &'a mut [u8],
     dimensions: Vect,
-    subdimensions: Option<Rect>,
+    subdimensions: Option<Rect>
 }
 
 impl<'a> Buffer<'a> {
@@ -29,7 +29,7 @@ impl<'a> Buffer<'a> {
         Self {
             buf,
             dimensions,
-            subdimensions: None,
+            subdimensions: None
         }
     }
 
@@ -41,14 +41,17 @@ impl<'a> Buffer<'a> {
         }
     }
 
-    pub fn subdimensions(&mut self, subdimensions: Rect) -> Result<Buffer<'_>, BufferError> {
+    pub fn subdimensions(
+        &mut self,
+        subdimensions: Rect
+    ) -> Result<Buffer<'_>, BufferError> {
         let bounds = self.get_bounds();
         if subdimensions.0 + subdimensions.2 >= bounds.2
             || subdimensions.1 + subdimensions.3 >= bounds.3
         {
             return Err(BufferError::SubdimensionsTooLarge {
                 subdimensions,
-                bounds,
+                bounds
             });
         }
 
@@ -59,8 +62,8 @@ impl<'a> Buffer<'a> {
                 subdimensions.0 + bounds.0,
                 subdimensions.1 + bounds.1,
                 subdimensions.2,
-                subdimensions.3,
-            )),
+                subdimensions.3
+            ))
         })
     }
 
@@ -77,8 +80,8 @@ impl<'a> Buffer<'a> {
                 offset.0 + bounds.0,
                 offset.1 + bounds.1,
                 bounds.2 - offset.0,
-                bounds.3 - offset.1,
-            )),
+                bounds.3 - offset.1
+            ))
         })
     }
 
@@ -88,7 +91,8 @@ impl<'a> Buffer<'a> {
                 let ptr = self.buf.as_mut_ptr();
                 for y in subdim.1..(subdim.1 + subdim.3) {
                     for x in subdim.0..(subdim.0 + subdim.2) {
-                        *((ptr as *mut u32).offset((x + y * self.dimensions.0) as isize)) =
+                        *((ptr as *mut u32)
+                            .offset((x + y * self.dimensions.0) as isize)) =
                             c.as_argb8888();
                     }
                 }
@@ -106,51 +110,59 @@ impl<'a> Buffer<'a> {
     pub fn put(&mut self, pos: Vect, c: &Color) -> Result<(), BufferError> {
         let true_pos = if let Some(subdim) = self.subdimensions {
             if pos.0 >= subdim.2 || pos.1 >= subdim.3 {
-                return Err(BufferError::PixelOutOfSubdimBounds { pos, subdim });
+                return Err(BufferError::PixelOutOfSubdimBounds {
+                    pos,
+                    subdim
+                });
             }
             (pos.0 + subdim.0, pos.1 + subdim.1)
         } else {
             if pos.0 >= self.dimensions.0 || pos.1 >= self.dimensions.1 {
                 return Err(BufferError::PixelOutOfBounds {
                     pos,
-                    dim: self.dimensions,
+                    dim: self.dimensions
                 });
             }
             pos
         };
 
         unsafe {
-            let ptr = self
-                .buf
-                .as_mut_ptr()
-                .offset(4 * (true_pos.0 + (true_pos.1 * self.dimensions.0)) as isize);
+            let ptr = self.buf.as_mut_ptr().offset(
+                4 * (true_pos.0 + (true_pos.1 * self.dimensions.0)) as isize
+            );
             *(ptr as *mut u32) = c.as_argb8888();
         };
 
         Ok(())
     }
 
-    pub fn put_argb8888(&mut self, pos: Vect, argb8888: u32) -> Result<(), BufferError> {
+    pub fn put_argb8888(
+        &mut self,
+        pos: Vect,
+        argb8888: u32
+    ) -> Result<(), BufferError> {
         let true_pos = if let Some(subdim) = self.subdimensions {
             if pos.0 >= subdim.2 || pos.1 >= subdim.3 {
-                return Err(BufferError::PixelOutOfSubdimBounds { pos, subdim });
+                return Err(BufferError::PixelOutOfSubdimBounds {
+                    pos,
+                    subdim
+                });
             }
             (pos.0 + subdim.0, pos.1 + subdim.1)
         } else {
             if pos.0 >= self.dimensions.0 || pos.1 >= self.dimensions.1 {
                 return Err(BufferError::PixelOutOfBounds {
                     pos,
-                    dim: self.dimensions,
+                    dim: self.dimensions
                 });
             }
             pos
         };
 
         unsafe {
-            let ptr = self
-                .buf
-                .as_mut_ptr()
-                .offset(4 * (true_pos.0 + (true_pos.1 * self.dimensions.0)) as isize);
+            let ptr = self.buf.as_mut_ptr().offset(
+                4 * (true_pos.0 + (true_pos.1 * self.dimensions.0)) as isize
+            );
             *(ptr as *mut u32) = argb8888;
         };
 

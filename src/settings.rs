@@ -9,7 +9,7 @@ pub struct Fonts {
     pub main: String,
     /// Pango font description string for the monospace UI font.
     /// Example: "DejaVu Sans Mono".
-    pub mono: String,
+    pub mono: String
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -23,7 +23,7 @@ pub struct Colors {
     /// Used for selections / active fields / in-progress actions.
     pub selected: String,
     /// Used for errors (e.g. auth failure).
-    pub error: String,
+    pub error: String
 }
 
 impl Default for Colors {
@@ -33,7 +33,7 @@ impl Default for Colors {
             background: "#000000".to_string(),
             neutral: "#BFBFBF".to_string(),
             selected: "#BFBF3F".to_string(),
-            error: "#BF3F3F".to_string(),
+            error: "#BF3F3F".to_string()
         }
     }
 }
@@ -44,14 +44,14 @@ pub struct ResolvedColors {
     pub background: Color,
     pub neutral: Color,
     pub selected: Color,
-    pub error: Color,
+    pub error: Color
 }
 
 impl Default for Fonts {
     fn default() -> Self {
         Self {
             main: "Sans".to_string(),
-            mono: "Monospace".to_string(),
+            mono: "Monospace".to_string()
         }
     }
 }
@@ -70,7 +70,7 @@ pub struct Login {
 
     /// Height of each input row in pixels.
     #[serde(default = "default_row_h")]
-    pub row_h: u32,
+    pub row_h: u32
 }
 
 fn default_gap_px() -> u32 {
@@ -87,7 +87,7 @@ impl Default for Login {
             target: None,
             username: None,
             gap_px: default_gap_px(),
-            row_h: default_row_h(),
+            row_h: default_row_h()
         }
     }
 }
@@ -100,7 +100,7 @@ pub struct Settings {
     pub colors: Colors,
 
     #[serde(default)]
-    pub login: Login,
+    pub login: Login
 }
 
 impl Default for Settings {
@@ -108,7 +108,7 @@ impl Default for Settings {
         Self {
             fonts: Fonts::default(),
             colors: Colors::default(),
-            login: Login::default(),
+            login: Login::default()
         }
     }
 }
@@ -126,10 +126,12 @@ impl Settings {
             .set_default("colors.error", Colors::default().error)?
             .set_default("login.gap_px", default_gap_px())?
             .set_default("login.row_h", default_row_h())?
-           .add_source(
-                config::File::from(std::path::Path::new("/etc/mflm/config.toml"))
-                    .format(config::FileFormat::Toml)
-                    .required(false),
+            .add_source(
+                config::File::from(std::path::Path::new(
+                    "/etc/mflm/config.toml"
+                ))
+                .format(config::FileFormat::Toml)
+                .required(false)
             );
 
         let cfg = builder.build()?;
@@ -142,7 +144,7 @@ impl Settings {
             background: Color::from_hex(&self.colors.background)?,
             neutral: Color::from_hex(&self.colors.neutral)?,
             selected: Color::from_hex(&self.colors.selected)?,
-            error: Color::from_hex(&self.colors.error)?,
+            error: Color::from_hex(&self.colors.error)?
         })
     }
 }
