@@ -323,8 +323,16 @@ impl crate::LoginManager<'_> {
             crate::settings::TextAlign::Right => pango::Alignment::Right
         };
 
-        self.main_font
-            .auto_draw_text_aligned(&mut buf, &bg, &fg, username, align)?;
+        let margin = self.input_margin_px.min(layout.w / 2);
+        if margin > 0 {
+            let inner_w = layout.w.saturating_sub(margin * 2);
+            let mut inner = buf.subdimensions((margin, 0, inner_w, layout.row_h))?;
+            self.main_font
+                .auto_draw_text_aligned(&mut inner, &bg, &fg, username, align)?;
+        } else {
+            self.main_font
+                .auto_draw_text_aligned(&mut buf, &bg, &fg, username, align)?;
+        }
 
         let border = if self.mode == crate::Mode::EditingUsername {
             self.colors.selected
@@ -371,8 +379,16 @@ impl crate::LoginManager<'_> {
             crate::settings::TextAlign::Right => pango::Alignment::Right
         };
 
-        self.main_font
-            .auto_draw_text_aligned(&mut buf, &bg, &fg, &stars, align)?;
+        let margin = self.input_margin_px.min(layout.w / 2);
+        if margin > 0 {
+            let inner_w = layout.w.saturating_sub(margin * 2);
+            let mut inner = buf.subdimensions((margin, 0, inner_w, layout.row_h))?;
+            self.main_font
+                .auto_draw_text_aligned(&mut inner, &bg, &fg, &stars, align)?;
+        } else {
+            self.main_font
+                .auto_draw_text_aligned(&mut buf, &bg, &fg, &stars, align)?;
+        }
 
         // Bottom border under password input.
         let border = if self.mode == crate::Mode::EditingPassword {

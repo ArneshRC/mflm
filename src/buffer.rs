@@ -46,8 +46,8 @@ impl<'a> Buffer<'a> {
         subdimensions: Rect
     ) -> Result<Buffer<'_>, BufferError> {
         let bounds = self.get_bounds();
-        if subdimensions.0 + subdimensions.2 >= bounds.2
-            || subdimensions.1 + subdimensions.3 >= bounds.3
+        if subdimensions.0 + subdimensions.2 > bounds.2
+            || subdimensions.1 + subdimensions.3 > bounds.3
         {
             return Err(BufferError::SubdimensionsTooLarge {
                 subdimensions,
