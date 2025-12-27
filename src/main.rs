@@ -26,6 +26,7 @@ mod buffer;
 mod color;
 mod draw;
 mod greetd;
+mod settings;
 
 #[derive(PartialEq, Copy, Clone)]
 enum Mode {
@@ -119,12 +120,13 @@ impl<'a> LoginManager<'a> {
         dimensions: (u32, u32),
         greetd: greetd::GreetD,
         targets: Vec<Target>,
+        fonts: &settings::Fonts,
     ) -> Self {
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
-            headline_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 72.0),
-            prompt_font: draw::Font::new(&draw::DEJAVUSANS_MONO, 32.0),
+            headline_font: draw::Font::new(&fonts.main, 72.0),
+            prompt_font: draw::Font::new(&fonts.mono, 32.0),
             screen_size,
             dimensions,
             mode: Mode::EditingUsername,
@@ -505,6 +507,20 @@ fn main() {
     info!("mflm starting at {}", Local::now().to_rfc3339());
     debug!("argv: {:?}", std::env::args().collect::<Vec<_>>());
 
+    let settings = match settings::Settings::load() {
+        Ok(s) => {
+            info!("Loaded configuration successfully");
+            debug!("Configured fonts: main={:?}, mono={:?}", s.fonts.main, s.fonts.mono);
+            s
+        }
+        Err(e) => {
+            warn!("Failed to load config; using defaults: {e}");
+            let s = settings::Settings::default();
+            debug!("Default fonts: main={:?}, mono={:?}", s.fonts.main, s.fonts.mono);
+            s
+        }
+    };
+
     let mut framebuffer = match Framebuffer::new("/dev/fb0") {
         Ok(fb) => fb,
         Err(e) => {
@@ -566,7 +582,14 @@ fn main() {
 
     info!("Loaded {} session targets", targets.len());
 
-    let mut lm = LoginManager::new(&mut framebuffer, (w, h), (1024, 168), greetd, targets);
+    let mut lm = LoginManager::new(
+        &mut framebuffer,
+        (w, h),
+        (1024, 168),
+        greetd,
+        targets,
+        &settings.fonts,
+    );
 
     lm.clear();
     if let Err(e) = lm.draw_bg(&Color::GRAY) {

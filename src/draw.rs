@@ -1,116 +1,69 @@
 use crate::buffer::{Buffer, BufferError};
 use crate::color::Color;
 
-use std::collections::HashMap;
-
-use lazy_static::lazy_static;
-use rusttype::{point, Font as RustFont, Scale};
+use cairo::{Context, Format, ImageSurface};
+use pangocairo::functions as pangocairo;
 use thiserror::Error;
-
-pub static DEJAVUSANS_MONO_FONT_DATA: &[u8] = include_bytes!("../fonts/dejavu/DejaVuSansMono.ttf");
-pub static ROBOTO_REGULAR_FONT_DATA: &[u8] = include_bytes!("../fonts/Roboto-Regular.ttf");
-
-lazy_static! {
-    pub static ref DEJAVUSANS_MONO: RustFont<'static> =
-        RustFont::try_from_bytes(DEJAVUSANS_MONO_FONT_DATA as &[u8])
-            .expect("error constructing DejaVuSansMono");
-    pub static ref ROBOTO_REGULAR: RustFont<'static> =
-        RustFont::try_from_bytes(ROBOTO_REGULAR_FONT_DATA as &[u8])
-            .expect("error constructing Roboto-Regular");
-}
 
 #[derive(Error, Debug)]
 #[non_exhaustive]
 pub enum DrawError {
-    #[error("glyph for {0} not in cache")]
-    GlyphNotInCache(char),
-}
+    #[error("buffer error: {0}")]
+    Buffer(#[from] BufferError),
 
-struct CachedGlyph {
-    dimensions: (u32, u32),
-    origin: (i32, i32),
-    render: Vec<f32>,
-}
-
-impl CachedGlyph {
-    fn new(font: &RustFont<'_>, size: f32, ch: char) -> CachedGlyph {
-        let scale = Scale::uniform(size);
-        let v_metrics = font.v_metrics(scale);
-        let glyph = font
-            .glyph(ch)
-            .scaled(scale)
-            .positioned(point(0.0, v_metrics.ascent));
-
-        if let Some(bounding_box) = glyph.pixel_bounding_box() {
-            let origin = (bounding_box.min.x, bounding_box.min.y);
-
-            let dimensions = (
-                (bounding_box.max.x - bounding_box.min.x) as u32,
-                (bounding_box.max.y - bounding_box.min.y) as u32,
-            );
-            let mut render = vec![0.0; (dimensions.0 * dimensions.1) as usize];
-            glyph.draw(|x, y, o| {
-                let pos = x + (y * dimensions.0);
-                render[pos as usize] = o;
-            });
-            CachedGlyph {
-                origin,
-                dimensions,
-                render,
-            }
-        } else {
-            CachedGlyph {
-                origin: (0, 0),
-                dimensions: ((size / 4.0) as u32, 0),
-                render: Vec::new(),
-            }
-        }
-    }
-
-    fn draw(&self, buf: &mut Buffer<'_>, pos: (i32, i32), bg: &Color, c: &Color) {
-        let mut x = 0;
-        let mut y = 0;
-        for v in &self.render {
-            let _ = buf.put(
-                (
-                    (x + pos.0 + self.origin.0) as u32,
-                    (y + pos.1 + self.origin.1) as u32,
-                ),
-                &bg.blend(c, *v),
-            );
-
-            if x == self.dimensions.0 as i32 - 1 {
-                y += 1;
-                x = 0;
-            } else {
-                x += 1;
-            }
-        }
-    }
+    #[error("cairo/pango error: {0}")]
+    Render(String),
 }
 
 pub struct Font {
-    glyphs: HashMap<char, CachedGlyph>,
-    font: &'static RustFont<'static>,
-    size: f32,
+    desc: pango::FontDescription,
+    size_px: f32,
 }
 
 impl Font {
-    pub fn new(font: &'static RustFont<'_>, size: f32) -> Font {
+    pub fn new(desc: &str, size_px: f32) -> Font {
+        let mut font_desc = pango::FontDescription::from_string(desc);
+        // Treat the configured string as a Pango font description, but keep
+        // size controlled by the caller to preserve existing layout.
+        font_desc.set_absolute_size((size_px as f64) * (pango::SCALE as f64));
         Font {
-            glyphs: HashMap::new(),
-            font,
-            size,
+            desc: font_desc,
+            size_px,
         }
     }
 
-    pub fn add_str_to_cache(&mut self, s: &str) {
-        for ch in s.chars() {
-            if self.glyphs.get(&ch).is_none() {
-                let glyph = CachedGlyph::new(self.font, self.size, ch);
-                self.glyphs.insert(ch, glyph);
-            }
-        }
+    fn render_to_surface(&self, bg: &Color, fg: &Color, text: &str) -> Result<(ImageSurface, i32, i32), DrawError> {
+        // Measure text using a tiny temporary surface.
+        let tmp = ImageSurface::create(Format::ARgb32, 1, 1)
+            .map_err(|e| DrawError::Render(format!("failed to create cairo surface: {e:?}")))?;
+        let tmp_ctx = Context::new(&tmp)
+            .map_err(|e| DrawError::Render(format!("failed to create cairo context: {e:?}")))?;
+        let layout = pangocairo::create_layout(&tmp_ctx);
+        layout.set_font_description(Some(&self.desc));
+        layout.set_text(text);
+        let (mut w, mut h) = layout.pixel_size();
+        w = w.max(1);
+        h = h.max(1);
+
+        let surface = ImageSurface::create(Format::ARgb32, w, h)
+            .map_err(|e| DrawError::Render(format!("failed to create cairo surface: {e:?}")))?;
+        let ctx = Context::new(&surface)
+            .map_err(|e| DrawError::Render(format!("failed to create cairo context: {e:?}")))?;
+
+        let (br, bgc, bb, ba) = bg.as_rgba_f32();
+        ctx.set_source_rgba(br, bgc, bb, ba);
+        ctx.paint()
+            .map_err(|e| DrawError::Render(format!("failed to paint background: {e:?}")))?;
+
+        let layout = pangocairo::create_layout(&ctx);
+        layout.set_font_description(Some(&self.desc));
+        layout.set_text(text);
+
+        let (fr, fgc, fb, fa) = fg.as_rgba_f32();
+        ctx.set_source_rgba(fr, fgc, fb, fa);
+        pangocairo::show_layout(&ctx, &layout);
+
+        Ok((surface, w, h))
     }
 
     pub fn draw_text(
@@ -120,25 +73,38 @@ impl Font {
         c: &Color,
         s: &str,
     ) -> Result<(u32, u32), DrawError> {
-        let mut x_off = 0;
-        let mut off = 0;
-        let mut glyphs = Vec::with_capacity(s.len());
-        for ch in s.chars() {
-            let glyph = match self.glyphs.get(&ch) {
-                Some(glyph) => glyph,
-                None => return Err(DrawError::GlyphNotInCache(ch)),
-            };
-            glyphs.push(glyph);
-            if glyph.origin.1 < off {
-                off = glyph.origin.1
+        // The existing UI expects a fixed "font height" in pixels; keep that.
+        let (mut surface, w, h) = self.render_to_surface(bg, c, s)?;
+        surface.flush();
+
+        let stride = surface.stride() as usize;
+        let data = surface
+            .data()
+            .map_err(|e| DrawError::Render(format!("failed to access cairo surface data: {e:?}")))?;
+
+        // Cairo ARgb32 is native-endian premultiplied alpha; on little-endian
+        // it is stored as BGRA bytes, which matches how we already write u32
+        // pixels (ARGB value written as native u32).
+        let bounds = buf.get_bounds();
+        let max_w = (w as u32).min(bounds.2);
+        let max_h = (h as u32).min(bounds.3);
+
+        for y in 0..max_h {
+            for x in 0..max_w {
+                let off = (y as usize * stride) + (x as usize * 4);
+                if off + 3 >= data.len() {
+                    continue;
+                }
+                let b = data[off];
+                let g = data[off + 1];
+                let r = data[off + 2];
+                let a = data[off + 3];
+                let argb = u32::from_be_bytes([a, r, g, b]);
+                buf.put_argb8888((x, y), argb)?;
             }
         }
-        for glyph in glyphs {
-            glyph.draw(buf, (x_off, -off), bg, c);
-            x_off += glyph.dimensions.0 as i32 + glyph.origin.0;
-        }
 
-        Ok((x_off as u32, self.size as u32))
+        Ok((w as u32, self.size_px.max(h as f32) as u32))
     }
 
     pub fn auto_draw_text(
@@ -148,7 +114,6 @@ impl Font {
         c: &Color,
         s: &str,
     ) -> Result<(u32, u32), DrawError> {
-        self.add_str_to_cache(s);
         self.draw_text(buf, bg, c, s)
     }
 }

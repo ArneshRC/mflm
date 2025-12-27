@@ -129,4 +129,31 @@ impl<'a> Buffer<'a> {
 
         Ok(())
     }
+
+    pub fn put_argb8888(&mut self, pos: Vect, argb8888: u32) -> Result<(), BufferError> {
+        let true_pos = if let Some(subdim) = self.subdimensions {
+            if pos.0 >= subdim.2 || pos.1 >= subdim.3 {
+                return Err(BufferError::PixelOutOfSubdimBounds { pos, subdim });
+            }
+            (pos.0 + subdim.0, pos.1 + subdim.1)
+        } else {
+            if pos.0 >= self.dimensions.0 || pos.1 >= self.dimensions.1 {
+                return Err(BufferError::PixelOutOfBounds {
+                    pos,
+                    dim: self.dimensions,
+                });
+            }
+            pos
+        };
+
+        unsafe {
+            let ptr = self
+                .buf
+                .as_mut_ptr()
+                .offset(4 * (true_pos.0 + (true_pos.1 * self.dimensions.0)) as isize);
+            *(ptr as *mut u32) = argb8888;
+        };
+
+        Ok(())
+    }
 }

@@ -37,4 +37,8 @@ impl Color {
         let argb = [self.opacity, self.red, self.green, self.blue];
         u32::from_be_bytes(argb.map(|x| (x * 255.0) as u8))
     }
+
+    pub fn as_rgba_f32(&self) -> (f64, f64, f64, f64) {
+        (self.red as f64, self.green as f64, self.blue as f64, self.opacity as f64)
+    }
 }
