@@ -102,6 +102,8 @@ struct LoginManager<'a> {
     headline_font: draw::Font,
     prompt_font: draw::Font,
 
+    colors: settings::ResolvedColors,
+
     screen_size: (u32, u32),
     dimensions: (u32, u32),
     mode: Mode,
@@ -121,12 +123,14 @@ impl<'a> LoginManager<'a> {
         greetd: greetd::GreetD,
         targets: Vec<Target>,
         fonts: &settings::Fonts,
+        colors: settings::ResolvedColors,
     ) -> Self {
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
             headline_font: draw::Font::new(&fonts.main, 72.0),
             prompt_font: draw::Font::new(&fonts.mono, 32.0),
+            colors,
             screen_size,
             dimensions,
             mode: Mode::EditingUsername,
@@ -151,8 +155,7 @@ impl<'a> LoginManager<'a> {
 
     fn clear(&mut self) {
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let bg = Color::BLACK;
-        buf.memset(&bg);
+        buf.memset(&self.colors.background);
         self.should_refresh = true;
     }
 
@@ -166,8 +169,8 @@ impl<'a> LoginManager<'a> {
     fn draw_bg(&mut self, box_color: &Color) -> Result<(), Error> {
         let (x, y) = self.offset();
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let bg = Color::BLACK;
-        let fg = Color::WHITE;
+        let bg = self.colors.background;
+        let fg = self.colors.foreground;
 
         draw::draw_box(
             &mut buf.subdimensions((x, y, self.dimensions.0, self.dimensions.1))?,
@@ -194,9 +197,9 @@ impl<'a> LoginManager<'a> {
         )?;
 
         let (session_color, username_color, password_color) = match self.mode {
-            Mode::SelectingSession => (Color::YELLOW, Color::WHITE, Color::WHITE),
-            Mode::EditingUsername => (Color::WHITE, Color::YELLOW, Color::WHITE),
-            Mode::EditingPassword => (Color::WHITE, Color::WHITE, Color::YELLOW),
+            Mode::SelectingSession => (self.colors.selected, fg, fg),
+            Mode::EditingUsername => (fg, self.colors.selected, fg),
+            Mode::EditingPassword => (fg, fg, self.colors.selected),
         };
 
         self.prompt_font.auto_draw_text(
@@ -239,13 +242,13 @@ impl<'a> LoginManager<'a> {
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
-        let bg = Color::BLACK;
+        let bg = self.colors.background;
         buf.memset(&bg);
 
         self.prompt_font.auto_draw_text(
             &mut buf,
             &bg,
-            &Color::WHITE,
+            &self.colors.foreground,
             &self.targets[self.target_index].name,
         )?;
 
@@ -261,13 +264,13 @@ impl<'a> LoginManager<'a> {
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
-        let bg = Color::BLACK;
+        let bg = self.colors.background;
         if redraw {
             buf.memset(&bg);
         }
 
         self.prompt_font
-            .auto_draw_text(&mut buf, &bg, &Color::WHITE, username)?;
+            .auto_draw_text(&mut buf, &bg, &self.colors.foreground, username)?;
 
         self.should_refresh = true;
 
@@ -281,7 +284,7 @@ impl<'a> LoginManager<'a> {
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
-        let bg = Color::BLACK;
+        let bg = self.colors.background;
         if redraw {
             buf.memset(&bg);
         }
@@ -292,7 +295,7 @@ impl<'a> LoginManager<'a> {
         }
 
         self.prompt_font
-            .auto_draw_text(&mut buf, &bg, &Color::WHITE, &stars)?;
+            .auto_draw_text(&mut buf, &bg, &self.colors.foreground, &stars)?;
 
         self.should_refresh = true;
 
@@ -362,7 +365,8 @@ impl<'a> LoginManager<'a> {
                 last_target_index = self.target_index;
             }
             if last_mode != self.mode {
-                if let Err(e) = self.draw_bg(&Color::GRAY) {
+                let bg = self.colors.neutral;
+                if let Err(e) = self.draw_bg(&bg) {
                     error!("Fatal: unable to draw background: {e}");
                     return;
                 }
@@ -370,7 +374,8 @@ impl<'a> LoginManager<'a> {
             }
 
             if had_failure {
-                if let Err(e) = self.draw_bg(&Color::GRAY) {
+                let bg = self.colors.neutral;
+                if let Err(e) = self.draw_bg(&bg) {
                     error!("Fatal: unable to draw background: {e}");
                     return;
                 }
@@ -424,7 +429,8 @@ impl<'a> LoginManager<'a> {
                             username.clear();
                             self.mode = Mode::EditingUsername;
                         } else {
-                            if let Err(e) = self.draw_bg(&Color::YELLOW) {
+                            let bg = self.colors.selected;
+                            if let Err(e) = self.draw_bg(&bg) {
                                 error!("Fatal: unable to draw background: {e}");
                                 return;
                             }
@@ -447,7 +453,8 @@ impl<'a> LoginManager<'a> {
                                 }
                                 Err(e) => {
                                     warn!("Login failed: {e}");
-                                    if let Err(e) = self.draw_bg(&Color::RED) {
+                                    let bg = self.colors.error;
+                                    if let Err(e) = self.draw_bg(&bg) {
                                         error!("Fatal: unable to draw background: {e}");
                                         return;
                                     }
@@ -521,6 +528,26 @@ fn main() {
         }
     };
 
+    let colors = match settings.resolve_colors() {
+        Ok(c) => {
+            debug!(
+                "Configured colors: fg={:?} bg={:?} neutral={:?} selected={:?} error={:?}",
+                settings.colors.foreground,
+                settings.colors.background,
+                settings.colors.neutral,
+                settings.colors.selected,
+                settings.colors.error
+            );
+            c
+        }
+        Err(e) => {
+            warn!("Invalid colors in config; using defaults: {e}");
+            settings::Settings::default()
+                .resolve_colors()
+                .expect("default colors must be valid")
+        }
+    };
+
     let mut framebuffer = match Framebuffer::new("/dev/fb0") {
         Ok(fb) => fb,
         Err(e) => {
@@ -589,10 +616,12 @@ fn main() {
         greetd,
         targets,
         &settings.fonts,
+        colors,
     );
 
     lm.clear();
-    if let Err(e) = lm.draw_bg(&Color::GRAY) {
+    let bg = lm.colors.neutral;
+    if let Err(e) = lm.draw_bg(&bg) {
         error!("Unable to draw background: {e}");
         let _ = Framebuffer::set_kd_mode(KdMode::Text);
         drop(raw);
