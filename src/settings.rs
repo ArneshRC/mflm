@@ -98,8 +98,6 @@ pub struct Ui {
     pub row_h: u32,
 
     #[serde(default = "default_password_char")]
-    #[serde(alias = "password-char")]
-    #[serde(alias = "passwordChar")]
     pub password_char: String,
 
     #[serde(default = "default_text_align")]
