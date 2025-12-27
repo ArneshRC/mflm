@@ -117,3 +117,192 @@ impl Font {
         Ok((w as u32, self.size_px.max(h as f32) as u32))
     }
 }
+
+impl<'a> crate::LoginManager<'a> {
+    pub(crate) fn refresh(&mut self) {
+        if self.should_refresh {
+            self.should_refresh = false;
+            let mut screeninfo = self.var_screen_info.clone();
+            screeninfo.activate |= crate::FB_ACTIVATE_NOW | crate::FB_ACTIVATE_FORCE;
+            if let Err(e) = framebuffer::Framebuffer::put_var_screeninfo(self.device, &screeninfo)
+            {
+                log::error!("Failed to refresh framebuffer: {e}");
+            }
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
+        buf.memset(&self.colors.background);
+        self.should_refresh = true;
+    }
+
+    fn draw_underline(row: &mut crate::buffer::Buffer<'_>, row_w: u32, row_h: u32, color: &Color) {
+        let thickness = 4u32.min(row_h.max(1));
+        let underline_w = (row_w / 2).max(16).min(row_w);
+        let start_x = (row_w.saturating_sub(underline_w)) / 2;
+        let start_y = row_h.saturating_sub(thickness);
+
+        for y in start_y..row_h {
+            for x in start_x..start_x.saturating_add(underline_w) {
+                let _ = row.put((x, y), color);
+            }
+        }
+    }
+
+    pub(crate) fn draw_bg(&mut self, box_color: &Color) -> Result<(), crate::Error> {
+        let layout = self.form_layout();
+        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
+        let bg = self.colors.background;
+        let fg = self.colors.foreground;
+
+        let form_fill = if box_color.as_argb8888() == self.colors.neutral.as_argb8888() {
+            bg
+        } else {
+            *box_color
+        };
+
+        {
+            let mut form = buf.subdimensions((layout.x, layout.y, layout.w, layout.total_h))?;
+            form.memset(&form_fill);
+        }
+
+        let hostname = hostname::get()?.to_string_lossy().into_owned();
+
+        self.headline_font.auto_draw_text_centered(
+            &mut buf.offset((0, 32))?,
+            &bg,
+            &fg,
+            &format!("Welcome to {hostname}"),
+        )?;
+
+        // Underlines (username/password). Selected field uses selected color.
+        if let Some(y_username) = layout.username_y {
+            let mut row = buf.subdimensions((layout.x, y_username, layout.w, layout.row_h))?;
+            let c = if self.mode == crate::Mode::EditingUsername {
+                self.colors.selected
+            } else {
+                self.colors.neutral
+            };
+            Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
+        }
+
+        {
+            let mut row =
+                buf.subdimensions((layout.x, layout.password_y, layout.w, layout.row_h))?;
+            let c = if self.mode == crate::Mode::EditingPassword {
+                self.colors.selected
+            } else {
+                self.colors.neutral
+            };
+            Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
+        }
+
+        self.should_refresh = true;
+
+        Ok(())
+    }
+
+    pub(crate) fn draw_target(&mut self) -> Result<(), crate::Error> {
+        let layout = self.form_layout();
+        let y = match layout.session_y {
+            Some(y) => y,
+            None => return Ok(()),
+        };
+
+        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
+        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
+        let bg = self.colors.background;
+        buf.memset(&bg);
+
+        let fg = if self.mode == crate::Mode::SelectingSession {
+            self.colors.selected
+        } else {
+            self.colors.foreground
+        };
+
+        self.prompt_font.auto_draw_text_centered(
+            &mut buf,
+            &bg,
+            &fg,
+            &self.targets[self.target_index].name,
+        )?;
+
+        self.should_refresh = true;
+
+        Ok(())
+    }
+
+    pub(crate) fn draw_username(&mut self, username: &str, redraw: bool) -> Result<(), crate::Error> {
+        let layout = self.form_layout();
+        let y = match layout.username_y {
+            Some(y) => y,
+            None => return Ok(()),
+        };
+
+        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
+        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
+        let bg = self.colors.background;
+        if redraw {
+            buf.memset(&bg);
+        }
+
+        let fg = if self.mode == crate::Mode::EditingUsername {
+            self.colors.selected
+        } else {
+            self.colors.foreground
+        };
+
+        self.prompt_font
+            .auto_draw_text_centered(&mut buf, &bg, &fg, username)?;
+
+        let border = if self.mode == crate::Mode::EditingUsername {
+            self.colors.selected
+        } else {
+            self.colors.neutral
+        };
+        Self::draw_underline(&mut buf, layout.w, layout.row_h, &border);
+
+        self.should_refresh = true;
+
+        Ok(())
+    }
+
+    pub(crate) fn draw_password(&mut self, password: &str, redraw: bool) -> Result<(), crate::Error> {
+        let layout = self.form_layout();
+        let y = layout.password_y;
+
+        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
+        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
+        let bg = self.colors.background;
+        if redraw {
+            buf.memset(&bg);
+        }
+
+        let mut stars = "".to_string();
+        for _ in 0..password.len() {
+            stars += "*";
+        }
+
+        let fg = if self.mode == crate::Mode::EditingPassword {
+            self.colors.selected
+        } else {
+            self.colors.foreground
+        };
+
+        self.prompt_font
+            .auto_draw_text_centered(&mut buf, &bg, &fg, &stars)?;
+
+        // Bottom border under password input.
+        let border = if self.mode == crate::Mode::EditingPassword {
+            self.colors.selected
+        } else {
+            self.colors.neutral
+        };
+        Self::draw_underline(&mut buf, layout.w, layout.row_h, &border);
+
+        self.should_refresh = true;
+
+        Ok(())
+    }
+}
