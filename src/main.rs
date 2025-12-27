@@ -51,6 +51,18 @@ struct Target {
     exec: Vec<String>,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct LoginLayout {
+    label_x: u32,
+    field_x: u32,
+    label_w: u32,
+    field_w: u32,
+    row_h: u32,
+    y_session: u32,
+    y_username: u32,
+    y_password: u32,
+}
+
 impl Target {
     fn load<P: AsRef<Path>>(path: P) -> Option<Self> {
         let path = path.as_ref();
@@ -249,8 +261,48 @@ impl<'a> LoginManager<'a> {
         )
     }
 
+    fn login_layout(&self) -> LoginLayout {
+        let right_pad = 32;
+        let row_h = 32;
+        let top_y = 24;
+        let bottom_pad = row_h;
+
+        let usable_gap = self
+            .dimensions
+            .1
+            .saturating_sub(top_y + bottom_pad + (row_h * 3));
+        let gap = usable_gap / 2;
+
+        let label_x = self.dimensions.0 / 4;
+        let mut field_x = (self.dimensions.0 * 13) / 32;
+
+        let min_label_w = 120;
+        if field_x < label_x.saturating_add(min_label_w) {
+            field_x = label_x.saturating_add(min_label_w);
+        }
+        let max_field_x = self.dimensions.0.saturating_sub(right_pad + 1);
+        if field_x > max_field_x {
+            field_x = max_field_x;
+        }
+
+        let label_w = field_x.saturating_sub(label_x);
+        let field_w = self.dimensions.0.saturating_sub(field_x + right_pad);
+
+        LoginLayout {
+            label_x,
+            field_x,
+            label_w,
+            field_w,
+            row_h,
+            y_session: top_y,
+            y_username: top_y + row_h + gap,
+            y_password: top_y + (row_h * 2) + (gap * 2),
+        }
+    }
+
     fn draw_bg(&mut self, box_color: &Color) -> Result<(), Error> {
         let (x, y) = self.offset();
+        let layout = self.login_layout();
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let bg = self.colors.background;
         let fg = self.colors.foreground;
@@ -263,8 +315,8 @@ impl<'a> LoginManager<'a> {
 
         let hostname = hostname::get()?.to_string_lossy().into_owned();
 
-        self.headline_font.auto_draw_text(
-            &mut buf.offset(((self.screen_size.0 / 2) - 300, 32))?,
+        self.headline_font.auto_draw_text_centered(
+            &mut buf.offset((0, 32))?,
             &bg,
             &fg,
             &format!("Welcome to {hostname}"),
@@ -285,21 +337,37 @@ impl<'a> LoginManager<'a> {
             Mode::EditingPassword => (fg, fg, self.colors.selected),
         };
 
-        let label_w = 416 - 256;
-        let field_w = self.dimensions.0 - 416 - 32;
-        let row_h = 32;
-
         if self.lock_target {
-            let mut label = buf.subdimensions((x + 256, y + 24, label_w, row_h))?;
+            let mut label = buf.subdimensions((
+                x + layout.label_x,
+                y + layout.y_session,
+                layout.label_w,
+                layout.row_h,
+            ))?;
             label.memset(&bg);
-            let mut field = buf.subdimensions((x + 416, y + 24, field_w, row_h))?;
+            let mut field = buf.subdimensions((
+                x + layout.field_x,
+                y + layout.y_session,
+                layout.field_w,
+                layout.row_h,
+            ))?;
             field.memset(&bg);
         }
 
         if self.forced_username.is_some() {
-            let mut label = buf.subdimensions((x + 256, y + 64, label_w, row_h))?;
+            let mut label = buf.subdimensions((
+                x + layout.label_x,
+                y + layout.y_username,
+                layout.label_w,
+                layout.row_h,
+            ))?;
             label.memset(&bg);
-            let mut field = buf.subdimensions((x + 416, y + 64, field_w, row_h))?;
+            let mut field = buf.subdimensions((
+                x + layout.field_x,
+                y + layout.y_username,
+                layout.field_w,
+                layout.row_h,
+            ))?;
             field.memset(&bg);
         }
 
@@ -307,7 +375,7 @@ impl<'a> LoginManager<'a> {
             self.prompt_font.auto_draw_text(
                 &mut buf
                     .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                    .offset((256, 24))?,
+                    .offset((layout.label_x, layout.y_session))?,
                 &bg,
                 &session_color,
                 "session:",
@@ -318,7 +386,7 @@ impl<'a> LoginManager<'a> {
             self.prompt_font.auto_draw_text(
                 &mut buf
                     .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                    .offset((256, 64))?,
+                    .offset((layout.label_x, layout.y_username))?,
                 &bg,
                 &username_color,
                 "username:",
@@ -328,7 +396,7 @@ impl<'a> LoginManager<'a> {
         self.prompt_font.auto_draw_text(
             &mut buf
                 .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((256, 104))
+                .offset((layout.label_x, layout.y_password))
                 ?,
             &bg,
             &password_color,
@@ -342,8 +410,9 @@ impl<'a> LoginManager<'a> {
 
     fn draw_target(&mut self) -> Result<(), Error> {
         let (x, y) = self.offset();
-        let (x, y) = (x + 416, y + 24);
-        let dim = (self.dimensions.0 - 416 - 32, 32);
+        let layout = self.login_layout();
+        let (x, y) = (x + layout.field_x, y + layout.y_session);
+        let dim = (layout.field_w, layout.row_h);
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
@@ -364,8 +433,9 @@ impl<'a> LoginManager<'a> {
 
     fn draw_username(&mut self, username: &str, redraw: bool) -> Result<(), Error> {
         let (x, y) = self.offset();
-        let (x, y) = (x + 416, y + 64);
-        let dim = (self.dimensions.0 - 416 - 32, 32);
+        let layout = self.login_layout();
+        let (x, y) = (x + layout.field_x, y + layout.y_username);
+        let dim = (layout.field_w, layout.row_h);
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
@@ -384,8 +454,9 @@ impl<'a> LoginManager<'a> {
 
     fn draw_password(&mut self, password: &str, redraw: bool) -> Result<(), Error> {
         let (x, y) = self.offset();
-        let (x, y) = (x + 416, y + 104);
-        let dim = (self.dimensions.0 - 416 - 32, 32);
+        let layout = self.login_layout();
+        let (x, y) = (x + layout.field_x, y + layout.y_password);
+        let dim = (layout.field_w, layout.row_h);
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
