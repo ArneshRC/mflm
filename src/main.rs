@@ -96,8 +96,8 @@ struct LoginManager<'a> {
     buf: &'a mut [u8],
     device: &'a fs::File,
 
-    headline_font: draw::Font,
-    prompt_font: draw::Font,
+    heading_font: draw::Font,
+    main_font: draw::Font,
 
     colors: settings::ResolvedColors,
 
@@ -186,8 +186,8 @@ impl<'a> LoginManager<'a> {
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
-            headline_font: draw::Font::new(&fonts.main, 72.0),
-            prompt_font: draw::Font::new(&fonts.mono, 42.0),
+            heading_font: draw::Font::new(&fonts.heading, fonts.heading_size_px),
+            main_font: draw::Font::new(&fonts.main, fonts.main_size_px),
             colors,
             forced_username,
             lock_target,
@@ -226,8 +226,11 @@ fn main() {
         Ok(s) => {
             info!("Loaded configuration successfully");
             debug!(
-                "Configured fonts: main={:?}, mono={:?}",
-                s.fonts.main, s.fonts.mono
+                "Configured fonts: heading={:?} ({}px), main={:?} ({}px)",
+                s.fonts.heading,
+                s.fonts.heading_size_px,
+                s.fonts.main,
+                s.fonts.main_size_px
             );
             debug!(
                 "Configured login: target={:?} username={:?}",
@@ -249,8 +252,11 @@ fn main() {
             warn!("Failed to load config; using defaults: {e}");
             let s = settings::Settings::default();
             debug!(
-                "Default fonts: main={:?}, mono={:?}",
-                s.fonts.main, s.fonts.mono
+                "Default fonts: heading={:?} ({}px), main={:?} ({}px)",
+                s.fonts.heading,
+                s.fonts.heading_size_px,
+                s.fonts.main,
+                s.fonts.main_size_px
             );
             debug!(
                 "Default login: target={:?} username={:?}",

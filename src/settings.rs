@@ -4,12 +4,21 @@ use crate::color::{Color, ParseColorError};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Fonts {
-    /// Pango font description string for the main UI font.
-    /// Example: "Roboto Regular" or "Sans 12".
+    /// Pango font description string for the main UI font (used for session/user/pass rows).
+    /// Example: "DejaVu Sans Mono" or "Sans".
     pub main: String,
-    /// Pango font description string for the monospace UI font.
-    /// Example: "DejaVu Sans Mono".
-    pub mono: String
+
+    /// Pango font description string for the heading UI font.
+    /// Example: "Sans Bold".
+    pub heading: String,
+
+    /// Font size for main UI text (pixels).
+    #[serde(default = "default_main_font_size_px")]
+    pub main_size_px: f32,
+
+    /// Font size for heading UI text (pixels).
+    #[serde(default = "default_heading_font_size_px")]
+    pub heading_size_px: f32
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,10 +59,20 @@ pub struct ResolvedColors {
 impl Default for Fonts {
     fn default() -> Self {
         Self {
-            main: "Sans".to_string(),
-            mono: "Monospace".to_string()
+            main: "Monospace".to_string(),
+            heading: "Sans".to_string(),
+            main_size_px: default_main_font_size_px(),
+            heading_size_px: default_heading_font_size_px()
         }
     }
+}
+
+fn default_main_font_size_px() -> f32 {
+    42.0
+}
+
+fn default_heading_font_size_px() -> f32 {
+    72.0
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
@@ -114,8 +133,6 @@ pub struct Ui {
     pub row_h: u32,
 
     #[serde(default = "default_password_char")]
-    #[serde(alias = "password-char")]
-    #[serde(alias = "passwordChar")]
     pub password_char: String,
 
     #[serde(default = "default_text_align")]
@@ -169,13 +186,14 @@ impl Settings {
     pub fn load() -> Result<Self, config::ConfigError> {
         let builder = config::Config::builder()
             .set_default("fonts.main", Fonts::default().main)?
-            .set_default("fonts.mono", Fonts::default().mono)?
+            .set_default("fonts.heading", Fonts::default().heading)?
+            .set_default("fonts.main_size_px", default_main_font_size_px() as f64)?
+            .set_default("fonts.heading_size_px", default_heading_font_size_px() as f64)?
             .set_default("colors.foreground", Colors::default().foreground)?
             .set_default("colors.background", Colors::default().background)?
             .set_default("colors.neutral", Colors::default().neutral)?
             .set_default("colors.selected", Colors::default().selected)?
             .set_default("colors.error", Colors::default().error)?
-            // New UI category (preferred)
             .set_default("ui.gap_px", default_gap_px())?
             .set_default("ui.row_h", default_row_h())?
             .set_default("ui.password_char", default_password_char())?

@@ -211,7 +211,7 @@ impl crate::LoginManager<'_> {
 
         let hostname = hostname::get()?.to_string_lossy().into_owned();
 
-        self.headline_font.auto_draw_text_centered(
+        self.heading_font.auto_draw_text_centered(
             &mut buf.offset((0, 32))?,
             &bg,
             &fg,
@@ -284,7 +284,7 @@ impl crate::LoginManager<'_> {
             (l, r) => format!("{l}  {session_name}  {r}")
         };
 
-        self.prompt_font
+        self.main_font
             .auto_draw_text_centered(&mut buf, &bg, &fg, &text)?;
 
         self.should_refresh = true;
@@ -323,7 +323,7 @@ impl crate::LoginManager<'_> {
             crate::settings::TextAlign::Right => pango::Alignment::Right
         };
 
-        self.prompt_font
+        self.main_font
             .auto_draw_text_aligned(&mut buf, &bg, &fg, username, align)?;
 
         let border = if self.mode == crate::Mode::EditingUsername {
@@ -371,7 +371,7 @@ impl crate::LoginManager<'_> {
             crate::settings::TextAlign::Right => pango::Alignment::Right
         };
 
-        self.prompt_font
+        self.main_font
             .auto_draw_text_aligned(&mut buf, &bg, &fg, &stars, align)?;
 
         // Bottom border under password input.
