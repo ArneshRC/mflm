@@ -56,7 +56,7 @@ impl Default for Fonts {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Default, Debug, Clone, Deserialize)]
 pub struct Login {
     /// Optional session target name to force.
     pub target: Option<String>,
@@ -140,16 +140,8 @@ struct UiRaw {
     pub text_align: Option<TextAlign>
 }
 
-impl Default for Login {
-    fn default() -> Self {
-        Self {
-            target: None,
-            username: None
-        }
-    }
-}
 
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Settings {
     pub fonts: Fonts,
     pub colors: Colors,
@@ -158,18 +150,8 @@ pub struct Settings {
     pub ui: Ui
 }
 
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            fonts: Fonts::default(),
-            colors: Colors::default(),
-            login: Login::default(),
-            ui: Ui::default()
-        }
-    }
-}
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Default, Debug, Clone, Deserialize)]
 struct SettingsRaw {
     #[serde(default)]
     pub fonts: Fonts,

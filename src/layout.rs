@@ -10,7 +10,7 @@ pub(crate) struct FormLayout {
     pub(crate) password_y: u32
 }
 
-impl<'a> crate::LoginManager<'a> {
+impl crate::LoginManager<'_> {
     pub(crate) fn form_layout(&self) -> FormLayout {
         let row_h = self.row_h;
         let gap = self.gap_px;

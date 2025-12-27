@@ -2,7 +2,7 @@ use std::io::Read;
 
 use log::{error, info, warn};
 
-impl<'a> crate::LoginManager<'a> {
+impl crate::LoginManager<'_> {
     fn mode_allowed(&self, mode: crate::Mode) -> bool {
         match mode {
             crate::Mode::SelectingSession => !self.lock_target,
@@ -280,42 +280,30 @@ impl<'a> crate::LoginManager<'a> {
                     }
                 },
                 // this is terrible
-                '\x1b' => match read_byte() {
-                    Some(b'[') => match read_byte() {
-                        Some(b'A') => self.goto_prev_mode(),
-                        Some(b'B') => self.goto_next_mode(),
-                        Some(b'C') => match self.mode {
-                            crate::Mode::SelectingSession => {
-                                if !self.lock_target {
-                                    self.target_index = (self.target_index + 1)
-                                        % self.targets.len()
-                                }
-                            }
-                            _ => () // TODO: cursor
-                        },
-                        Some(b'D') => match self.mode {
-                            crate::Mode::SelectingSession => {
-                                if !self.lock_target {
-                                    if self.target_index == 0 {
-                                        self.target_index = self.targets.len();
-                                    }
-                                    self.target_index -= 1;
-                                }
-                            }
-                            _ => () // TODO: cursor
-                        },
-                        _ => () // shrug
+                '\x1b' => if let Some(b'[') = read_byte() { match read_byte() {
+                    Some(b'A') => self.goto_prev_mode(),
+                    Some(b'B') => self.goto_next_mode(),
+                    Some(b'C') => if self.mode == crate::Mode::SelectingSession && !self.lock_target {
+                        self.target_index = (self.target_index + 1)
+                            % self.targets.len()
                     },
+                    Some(b'D') => if self.mode == crate::Mode::SelectingSession && !self.lock_target {
+                            if self.target_index == 0 {
+                                self.target_index = self.targets.len();
+                            }
+                            self.target_index -= 1;
+                        }
+                    ,
                     _ => () // shrug
-                },
+                } },
                 v => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
                         if self.forced_username.is_none() {
-                            username.push(v as char)
+                            username.push(v)
                         }
                     }
-                    crate::Mode::EditingPassword => password.push(v as char)
+                    crate::Mode::EditingPassword => password.push(v)
                 }
             }
             self.refresh();
