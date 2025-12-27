@@ -6,7 +6,7 @@ use chrono::Local;
 use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
 use freedesktop_desktop_entry::DesktopEntry;
 use log::{debug, error, info, warn};
-use simplelog::{Config as LogConfig, LevelFilter, WriteLogger};
+use simplelog::{ConfigBuilder as LogConfigBuilder, LevelFilter, WriteLogger};
 use termion::raw::IntoRawMode;
 use thiserror::Error;
 
@@ -430,9 +430,14 @@ fn init_logging() -> Result<(), io::Error> {
         .append(true)
         .open(&log_path)?;
 
-    // Debug = verbose. Simplelog's default config includes timestamps; we also
-    // log a clear startup banner with full date/time.
-    WriteLogger::init(LevelFilter::Debug, LogConfig::default(), file)
+    // Debug = verbose
+    let mut log_config_builder = LogConfigBuilder::new();
+    if log_config_builder.set_time_offset_to_local().is_err() {
+        warn!("Failed to set log timestamps to local time");
+    }
+    let log_config = log_config_builder.build();
+
+    WriteLogger::init(LevelFilter::Debug, log_config, file)
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     Ok(())
 }
