@@ -56,10 +56,24 @@ impl Default for Fonts {
     }
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct Login {
+    /// Optional session target name to force.
+    pub target: Option<String>,
+
+    /// Optional username to force.
+    pub username: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Settings {
+    #[serde(default)]
     pub fonts: Fonts,
+    #[serde(default)]
     pub colors: Colors,
+
+    #[serde(default)]
+    pub login: Login,
 }
 
 impl Default for Settings {
@@ -67,6 +81,7 @@ impl Default for Settings {
         Self {
             fonts: Fonts::default(),
             colors: Colors::default(),
+            login: Login::default(),
         }
     }
 }
@@ -74,7 +89,7 @@ impl Default for Settings {
 impl Settings {
     /// Loads configuration from /etc/mflm/config.toml
     pub fn load() -> Result<Self, config::ConfigError> {
-        let mut builder = config::Config::builder()
+        let builder = config::Config::builder()
             .set_default("fonts.main", Fonts::default().main)?
             .set_default("fonts.mono", Fonts::default().mono)?
             .set_default("colors.foreground", Colors::default().foreground)?

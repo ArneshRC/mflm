@@ -104,6 +104,9 @@ struct LoginManager<'a> {
 
     colors: settings::ResolvedColors,
 
+    forced_username: Option<String>,
+    lock_target: bool,
+
     screen_size: (u32, u32),
     dimensions: (u32, u32),
     mode: Mode,
@@ -124,22 +127,102 @@ impl<'a> LoginManager<'a> {
         targets: Vec<Target>,
         fonts: &settings::Fonts,
         colors: settings::ResolvedColors,
+        login: &settings::Login,
     ) -> Self {
+        let forced_username = login
+            .username
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let (target_index, lock_target) = match login
+            .target
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(forced) => match targets.iter().position(|t| t.name == forced) {
+                Some(i) => {
+                    info!("Forcing target session from config: {forced:?}");
+                    (i, true)
+                }
+                None => {
+                    warn!(
+                        "Configured login.target {forced:?} did not match any discovered session; leaving session selection enabled"
+                    );
+                    (0, false)
+                }
+            },
+            None => (0, false),
+        };
+
+        if let Some(u) = forced_username.as_deref() {
+            info!("Forcing username from config (len={})", u.len());
+            debug!("Forced username: {u:?}");
+        }
+
+        let mode = if forced_username.is_some() {
+            Mode::EditingPassword
+        } else {
+            Mode::EditingUsername
+        };
+
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
             headline_font: draw::Font::new(&fonts.main, 72.0),
             prompt_font: draw::Font::new(&fonts.mono, 32.0),
             colors,
+            forced_username,
+            lock_target,
             screen_size,
             dimensions,
-            mode: Mode::EditingUsername,
+            mode,
             greetd,
             targets,
-            target_index: 0, // TODO: remember last user selection
+            target_index, // TODO: remember last user selection
             var_screen_info: &fb.var_screen_info,
             should_refresh: false,
         }
+    }
+
+    fn mode_allowed(&self, mode: Mode) -> bool {
+        match mode {
+            Mode::SelectingSession => !self.lock_target,
+            Mode::EditingUsername => self.forced_username.is_none(),
+            Mode::EditingPassword => true,
+        }
+    }
+
+    fn next_allowed_mode(&self, from: Mode) -> Mode {
+        let mut cur = from;
+        for _ in 0..3 {
+            cur = match cur {
+                Mode::SelectingSession => Mode::EditingUsername,
+                Mode::EditingUsername => Mode::EditingPassword,
+                Mode::EditingPassword => Mode::SelectingSession,
+            };
+            if self.mode_allowed(cur) {
+                return cur;
+            }
+        }
+        from
+    }
+
+    fn prev_allowed_mode(&self, from: Mode) -> Mode {
+        let mut cur = from;
+        for _ in 0..3 {
+            cur = match cur {
+                Mode::SelectingSession => Mode::EditingPassword,
+                Mode::EditingUsername => Mode::SelectingSession,
+                Mode::EditingPassword => Mode::EditingUsername,
+            };
+            if self.mode_allowed(cur) {
+                return cur;
+            }
+        }
+        from
     }
 
     fn refresh(&mut self) {
@@ -202,23 +285,45 @@ impl<'a> LoginManager<'a> {
             Mode::EditingPassword => (fg, fg, self.colors.selected),
         };
 
-        self.prompt_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((256, 24))?,
-            &bg,
-            &session_color,
-            "session:",
-        )?;
+        let label_w = 416 - 256;
+        let field_w = self.dimensions.0 - 416 - 32;
+        let row_h = 32;
 
-        self.prompt_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((256, 64))?,
-            &bg,
-            &username_color,
-            "username:",
-        )?;
+        if self.lock_target {
+            let mut label = buf.subdimensions((x + 256, y + 24, label_w, row_h))?;
+            label.memset(&bg);
+            let mut field = buf.subdimensions((x + 416, y + 24, field_w, row_h))?;
+            field.memset(&bg);
+        }
+
+        if self.forced_username.is_some() {
+            let mut label = buf.subdimensions((x + 256, y + 64, label_w, row_h))?;
+            label.memset(&bg);
+            let mut field = buf.subdimensions((x + 416, y + 64, field_w, row_h))?;
+            field.memset(&bg);
+        }
+
+        if !self.lock_target {
+            self.prompt_font.auto_draw_text(
+                &mut buf
+                    .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
+                    .offset((256, 24))?,
+                &bg,
+                &session_color,
+                "session:",
+            )?;
+        }
+
+        if self.forced_username.is_none() {
+            self.prompt_font.auto_draw_text(
+                &mut buf
+                    .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
+                    .offset((256, 64))?,
+                &bg,
+                &username_color,
+                "username:",
+            )?;
+        }
 
         self.prompt_font.auto_draw_text(
             &mut buf
@@ -303,25 +408,20 @@ impl<'a> LoginManager<'a> {
     }
 
     fn goto_next_mode(&mut self) {
-        self.mode = match self.mode {
-            Mode::SelectingSession => Mode::EditingUsername,
-            Mode::EditingUsername => Mode::EditingPassword,
-            Mode::EditingPassword => Mode::SelectingSession,
-        }
+        self.mode = self.next_allowed_mode(self.mode);
     }
 
     fn goto_prev_mode(&mut self) {
-        self.mode = match self.mode {
-            Mode::SelectingSession => Mode::EditingPassword,
-            Mode::EditingUsername => Mode::SelectingSession,
-            Mode::EditingPassword => Mode::EditingUsername,
-        }
+        self.mode = self.prev_allowed_mode(self.mode);
     }
 
     fn greeter_loop(&mut self) {
-        let mut username = String::with_capacity(USERNAME_CAP);
+        let mut username = self
+            .forced_username
+            .clone()
+            .unwrap_or_else(|| String::with_capacity(USERNAME_CAP));
         let mut password = String::with_capacity(PASSWORD_CAP);
-        let mut last_username_len = username.len();
+        let mut last_username_len = usize::MAX;
         let mut last_password_len = password.len();
         let mut last_target_index = self.target_index;
         let mut last_mode = self.mode;
@@ -333,13 +433,15 @@ impl<'a> LoginManager<'a> {
 
         let mut read_byte = || -> Option<u8> { stdin_bytes.next().and_then(Result::ok) };
 
-        if let Err(e) = self.draw_target() {
-            error!("Fatal: unable to draw target session: {e}");
-            return;
+        if !self.lock_target {
+            if let Err(e) = self.draw_target() {
+                error!("Fatal: unable to draw target session: {e}");
+                return;
+            }
         }
 
         loop {
-            if username.len() != last_username_len {
+            if self.forced_username.is_none() && username.len() != last_username_len {
                 if let Err(e) =
                     self.draw_username(&username, username.len() < last_username_len)
                 {
@@ -357,7 +459,7 @@ impl<'a> LoginManager<'a> {
                 }
                 last_password_len = password.len();
             }
-            if last_target_index != self.target_index {
+            if !self.lock_target && last_target_index != self.target_index {
                 if let Err(e) = self.draw_target() {
                     error!("Fatal: unable to draw target session: {e}");
                     return;
@@ -394,7 +496,11 @@ impl<'a> LoginManager<'a> {
                 '\x15' | '\x0B' => match self.mode {
                     // ctrl-k/ctrl-u
                     Mode::SelectingSession => (),
-                    Mode::EditingUsername => username.clear(),
+                    Mode::EditingUsername => {
+                        if self.forced_username.is_none() {
+                            username.clear();
+                        }
+                    }
                     Mode::EditingPassword => password.clear(),
                 },
                 '\x03' | '\x04' => {
@@ -410,7 +516,9 @@ impl<'a> LoginManager<'a> {
                     // backspace
                     Mode::SelectingSession => (),
                     Mode::EditingUsername => {
-                        username.pop();
+                        if self.forced_username.is_none() {
+                            username.pop();
+                        }
                     }
                     Mode::EditingPassword => {
                         password.pop();
@@ -418,16 +526,24 @@ impl<'a> LoginManager<'a> {
                 },
                 '\t' => self.goto_next_mode(),
                 '\r' => match self.mode {
-                    Mode::SelectingSession => self.mode = Mode::EditingUsername,
+                    Mode::SelectingSession => {
+                        self.mode = if self.forced_username.is_some() {
+                            Mode::EditingPassword
+                        } else {
+                            Mode::EditingUsername
+                        };
+                    }
                     Mode::EditingUsername => {
-                        if !username.is_empty() {
+                        if self.forced_username.is_none() && !username.is_empty() {
                             self.mode = Mode::EditingPassword;
                         }
                     }
                     Mode::EditingPassword => {
                         if password.is_empty() {
-                            username.clear();
-                            self.mode = Mode::EditingUsername;
+                            if self.forced_username.is_none() {
+                                username.clear();
+                                self.mode = Mode::EditingUsername;
+                            }
                         } else {
                             let bg = self.colors.selected;
                             if let Err(e) = self.draw_bg(&bg) {
@@ -439,12 +555,23 @@ impl<'a> LoginManager<'a> {
                                 self.target_index,
                                 username.len()
                             );
+
+                            let username_for_login = self
+                                .forced_username
+                                .clone()
+                                .unwrap_or_else(|| username.clone());
+                            let password_for_login = std::mem::take(&mut password);
                             let res = self.greetd.login(
-                                username,
-                                password,
+                                username_for_login,
+                                password_for_login,
                                 self.targets[self.target_index].exec.clone(),
                             );
-                            username = String::with_capacity(USERNAME_CAP);
+
+                            if self.forced_username.is_none() {
+                                username = String::with_capacity(USERNAME_CAP);
+                            } else {
+                                username = self.forced_username.clone().unwrap();
+                            }
                             password = String::with_capacity(PASSWORD_CAP);
                             match res {
                                 Ok(_) => {
@@ -458,7 +585,11 @@ impl<'a> LoginManager<'a> {
                                         error!("Fatal: unable to draw background: {e}");
                                         return;
                                     }
-                                    self.mode = Mode::EditingUsername;
+                                    self.mode = if self.forced_username.is_some() {
+                                        Mode::EditingPassword
+                                    } else {
+                                        Mode::EditingUsername
+                                    };
                                     if let Err(e) = self.greetd.cancel() {
                                         warn!("Failed to cancel greetd session after login failure: {e}");
                                     }
@@ -475,16 +606,21 @@ impl<'a> LoginManager<'a> {
                         Some(b'B') => self.goto_next_mode(),
                         Some(b'C') => match self.mode {
                             Mode::SelectingSession => {
-                                self.target_index = (self.target_index + 1) % self.targets.len()
+                                if !self.lock_target {
+                                    self.target_index =
+                                        (self.target_index + 1) % self.targets.len()
+                                }
                             }
                             _ => (), // TODO: cursor
                         },
                         Some(b'D') => match self.mode {
                             Mode::SelectingSession => {
-                                if self.target_index == 0 {
-                                    self.target_index = self.targets.len();
+                                if !self.lock_target {
+                                    if self.target_index == 0 {
+                                        self.target_index = self.targets.len();
+                                    }
+                                    self.target_index -= 1;
                                 }
-                                self.target_index -= 1;
                             }
                             _ => (), // TODO: cursor
                         },
@@ -494,7 +630,11 @@ impl<'a> LoginManager<'a> {
                 },
                 v => match self.mode {
                     Mode::SelectingSession => (),
-                    Mode::EditingUsername => username.push(v as char),
+                    Mode::EditingUsername => {
+                        if self.forced_username.is_none() {
+                            username.push(v as char)
+                        }
+                    }
                     Mode::EditingPassword => password.push(v as char),
                 },
             }
@@ -617,6 +757,7 @@ fn main() {
         targets,
         &settings.fonts,
         colors,
+        &settings.login,
     );
 
     lm.clear();
