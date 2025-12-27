@@ -56,13 +56,40 @@ impl Default for Fonts {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Login {
     /// Optional session target name to force.
     pub target: Option<String>,
 
     /// Optional username to force.
     pub username: Option<String>,
+
+    /// Vertical gap in pixels between input rows.
+    #[serde(default = "default_gap_px")]
+    pub gap_px: u32,
+
+    /// Height of each input row in pixels.
+    #[serde(default = "default_row_h")]
+    pub row_h: u32,
+}
+
+fn default_gap_px() -> u32 {
+    32
+}
+
+fn default_row_h() -> u32 {
+    72
+}
+
+impl Default for Login {
+    fn default() -> Self {
+        Self {
+            target: None,
+            username: None,
+            gap_px: default_gap_px(),
+            row_h: default_row_h(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -97,7 +124,9 @@ impl Settings {
             .set_default("colors.neutral", Colors::default().neutral)?
             .set_default("colors.selected", Colors::default().selected)?
             .set_default("colors.error", Colors::default().error)?
-            .add_source(
+            .set_default("login.gap_px", default_gap_px())?
+            .set_default("login.row_h", default_row_h())?
+           .add_source(
                 config::File::from(std::path::Path::new("/etc/mflm/config.toml"))
                     .format(config::FileFormat::Toml)
                     .required(false),

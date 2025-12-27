@@ -16,21 +16,7 @@ pub enum ParseColorError {
     InvalidHex(String),
 }
 
-const fn rgb(red: f32, green: f32, blue: f32) -> Color {
-    Color {
-        red,
-        green,
-        blue,
-        opacity: 1.0,
-    }
-}
-
 impl Color {
-    pub const BLACK: Self = rgb(0.0, 0.0, 0.0);
-    pub const GRAY: Self = rgb(0.75, 0.75, 0.75);
-    pub const WHITE: Self = rgb(1.0, 1.0, 1.0);
-    pub const RED: Self = rgb(0.75, 0.25, 0.25);
-    pub const YELLOW: Self = rgb(0.75, 0.75, 0.25);
 
     pub fn from_rgba_u8(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self {
@@ -66,17 +52,6 @@ impl Color {
                 Ok(Self::from_rgba_u8(r, g, b, a))
             }
             len => Err(ParseColorError::InvalidLength { len }),
-        }
-    }
-
-    pub fn blend(&self, other: &Color, ratio: f32) -> Self {
-        let ratio = ratio.clamp(0.0, 1.0);
-
-        Self {
-            red: self.red + ((other.red - self.red) * ratio),
-            green: self.green + ((other.green - self.green) * ratio),
-            blue: self.blue + ((other.blue - self.blue) * ratio),
-            opacity: self.opacity + ((other.opacity - self.opacity) * ratio),
         }
     }
 

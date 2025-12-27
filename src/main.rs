@@ -52,15 +52,15 @@ struct Target {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct LoginLayout {
-    label_x: u32,
-    field_x: u32,
-    label_w: u32,
-    field_w: u32,
+struct FormLayout {
+    x: u32,
+    y: u32,
+    w: u32,
     row_h: u32,
-    y_session: u32,
-    y_username: u32,
-    y_password: u32,
+    total_h: u32,
+    session_y: Option<u32>,
+    username_y: Option<u32>,
+    password_y: u32,
 }
 
 impl Target {
@@ -118,6 +118,8 @@ struct LoginManager<'a> {
 
     forced_username: Option<String>,
     lock_target: bool,
+    gap_px: u32,
+    row_h: u32,
 
     screen_size: (u32, u32),
     dimensions: (u32, u32),
@@ -184,10 +186,12 @@ impl<'a> LoginManager<'a> {
             buf: &mut fb.frame,
             device: &fb.device,
             headline_font: draw::Font::new(&fonts.main, 72.0),
-            prompt_font: draw::Font::new(&fonts.mono, 32.0),
+            prompt_font: draw::Font::new(&fonts.mono, 42.0),
             colors,
             forced_username,
             lock_target,
+            gap_px: login.gap_px,
+            row_h: login.row_h,
             screen_size,
             dimensions,
             mode,
@@ -254,64 +258,87 @@ impl<'a> LoginManager<'a> {
         self.should_refresh = true;
     }
 
-    fn offset(&self) -> (u32, u32) {
-        (
-            (self.screen_size.0 - self.dimensions.0) / 2,
-            (self.screen_size.1 - self.dimensions.1) / 2,
-        )
+    fn form_layout(&self) -> FormLayout {
+        let row_h = self.row_h;
+        let gap = self.gap_px;
+
+        let show_session = !self.lock_target;
+        let show_username = self.forced_username.is_none();
+        let rows = (show_session as u32) + (show_username as u32) + 1;
+        let total_h = rows * row_h + rows.saturating_sub(1) * gap;
+
+        let margin_x = 32;
+        let max_w = self.screen_size.0.saturating_sub(margin_x * 2).max(1);
+        let w = self.dimensions.0.min(max_w).max(1);
+
+        let x = (self.screen_size.0.saturating_sub(w)) / 2;
+        let y = (self.screen_size.1.saturating_sub(total_h)) / 2;
+
+        let mut cur_y = y;
+        let session_y = if show_session {
+            let out = cur_y;
+            cur_y = cur_y.saturating_add(row_h + gap);
+            Some(out)
+        } else {
+            None
+        };
+
+        let username_y = if show_username {
+            let out = cur_y;
+            cur_y = cur_y.saturating_add(row_h + gap);
+            Some(out)
+        } else {
+            None
+        };
+
+        let password_y = cur_y;
+
+        FormLayout {
+            x,
+            y,
+            w,
+            row_h,
+            total_h,
+            session_y,
+            username_y,
+            password_y,
+        }
     }
 
-    fn login_layout(&self) -> LoginLayout {
-        let right_pad = 32;
-        let row_h = 32;
-        let top_y = 24;
-        let bottom_pad = row_h;
+    fn draw_underline(
+        row: &mut buffer::Buffer<'_>,
+        row_w: u32,
+        row_h: u32,
+        color: &Color,
+    ) {
+        let thickness = 4u32.min(row_h.max(1));
+        let underline_w = (row_w / 2).max(16).min(row_w);
+        let start_x = (row_w.saturating_sub(underline_w)) / 2;
+        let start_y = row_h.saturating_sub(thickness);
 
-        let usable_gap = self
-            .dimensions
-            .1
-            .saturating_sub(top_y + bottom_pad + (row_h * 3));
-        let gap = usable_gap / 2;
-
-        let label_x = self.dimensions.0 / 4;
-        let mut field_x = (self.dimensions.0 * 13) / 32;
-
-        let min_label_w = 120;
-        if field_x < label_x.saturating_add(min_label_w) {
-            field_x = label_x.saturating_add(min_label_w);
-        }
-        let max_field_x = self.dimensions.0.saturating_sub(right_pad + 1);
-        if field_x > max_field_x {
-            field_x = max_field_x;
-        }
-
-        let label_w = field_x.saturating_sub(label_x);
-        let field_w = self.dimensions.0.saturating_sub(field_x + right_pad);
-
-        LoginLayout {
-            label_x,
-            field_x,
-            label_w,
-            field_w,
-            row_h,
-            y_session: top_y,
-            y_username: top_y + row_h + gap,
-            y_password: top_y + (row_h * 2) + (gap * 2),
+        for y in start_y..row_h {
+            for x in start_x..start_x.saturating_add(underline_w) {
+                let _ = row.put((x, y), color);
+            }
         }
     }
 
     fn draw_bg(&mut self, box_color: &Color) -> Result<(), Error> {
-        let (x, y) = self.offset();
-        let layout = self.login_layout();
+        let layout = self.form_layout();
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
         let bg = self.colors.background;
         let fg = self.colors.foreground;
 
-        draw::draw_box(
-            &mut buf.subdimensions((x, y, self.dimensions.0, self.dimensions.1))?,
-            box_color,
-            (self.dimensions.0, self.dimensions.1),
-        )?;
+        let form_fill = if box_color.as_argb8888() == self.colors.neutral.as_argb8888() {
+            bg
+        } else {
+            *box_color
+        };
+
+        {
+            let mut form = buf.subdimensions((layout.x, layout.y, layout.w, layout.total_h))?;
+            form.memset(&form_fill);
+        }
 
         let hostname = hostname::get()?.to_string_lossy().into_owned();
 
@@ -322,86 +349,26 @@ impl<'a> LoginManager<'a> {
             &format!("Welcome to {hostname}"),
         )?;
 
-        self.headline_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((32, 24))?,
-            &bg,
-            &fg,
-            "Login",
-        )?;
-
-        let (session_color, username_color, password_color) = match self.mode {
-            Mode::SelectingSession => (self.colors.selected, fg, fg),
-            Mode::EditingUsername => (fg, self.colors.selected, fg),
-            Mode::EditingPassword => (fg, fg, self.colors.selected),
-        };
-
-        if self.lock_target {
-            let mut label = buf.subdimensions((
-                x + layout.label_x,
-                y + layout.y_session,
-                layout.label_w,
-                layout.row_h,
-            ))?;
-            label.memset(&bg);
-            let mut field = buf.subdimensions((
-                x + layout.field_x,
-                y + layout.y_session,
-                layout.field_w,
-                layout.row_h,
-            ))?;
-            field.memset(&bg);
+        // Underlines (username/password). Selected field uses selected color.
+        if let Some(y_username) = layout.username_y {
+            let mut row = buf.subdimensions((layout.x, y_username, layout.w, layout.row_h))?;
+            let c = if self.mode == Mode::EditingUsername {
+                self.colors.selected
+            } else {
+                self.colors.neutral
+            };
+            Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
         }
 
-        if self.forced_username.is_some() {
-            let mut label = buf.subdimensions((
-                x + layout.label_x,
-                y + layout.y_username,
-                layout.label_w,
-                layout.row_h,
-            ))?;
-            label.memset(&bg);
-            let mut field = buf.subdimensions((
-                x + layout.field_x,
-                y + layout.y_username,
-                layout.field_w,
-                layout.row_h,
-            ))?;
-            field.memset(&bg);
+        {
+            let mut row = buf.subdimensions((layout.x, layout.password_y, layout.w, layout.row_h))?;
+            let c = if self.mode == Mode::EditingPassword {
+                self.colors.selected
+            } else {
+                self.colors.neutral
+            };
+            Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
         }
-
-        if !self.lock_target {
-            self.prompt_font.auto_draw_text(
-                &mut buf
-                    .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                    .offset((layout.label_x, layout.y_session))?,
-                &bg,
-                &session_color,
-                "session:",
-            )?;
-        }
-
-        if self.forced_username.is_none() {
-            self.prompt_font.auto_draw_text(
-                &mut buf
-                    .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                    .offset((layout.label_x, layout.y_username))?,
-                &bg,
-                &username_color,
-                "username:",
-            )?;
-        }
-
-        self.prompt_font.auto_draw_text(
-            &mut buf
-                .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
-                .offset((layout.label_x, layout.y_password))
-                ?,
-            &bg,
-            &password_color,
-            "password:",
-        )?;
 
         self.should_refresh = true;
 
@@ -409,20 +376,27 @@ impl<'a> LoginManager<'a> {
     }
 
     fn draw_target(&mut self) -> Result<(), Error> {
-        let (x, y) = self.offset();
-        let layout = self.login_layout();
-        let (x, y) = (x + layout.field_x, y + layout.y_session);
-        let dim = (layout.field_w, layout.row_h);
+        let layout = self.form_layout();
+        let y = match layout.session_y {
+            Some(y) => y,
+            None => return Ok(()),
+        };
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
+        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
         let bg = self.colors.background;
         buf.memset(&bg);
 
-        self.prompt_font.auto_draw_text(
+        let fg = if self.mode == Mode::SelectingSession {
+            self.colors.selected
+        } else {
+            self.colors.foreground
+        };
+
+        self.prompt_font.auto_draw_text_centered(
             &mut buf,
             &bg,
-            &self.colors.foreground,
+            &fg,
             &self.targets[self.target_index].name,
         )?;
 
@@ -432,20 +406,34 @@ impl<'a> LoginManager<'a> {
     }
 
     fn draw_username(&mut self, username: &str, redraw: bool) -> Result<(), Error> {
-        let (x, y) = self.offset();
-        let layout = self.login_layout();
-        let (x, y) = (x + layout.field_x, y + layout.y_username);
-        let dim = (layout.field_w, layout.row_h);
+        let layout = self.form_layout();
+        let y = match layout.username_y {
+            Some(y) => y,
+            None => return Ok(()),
+        };
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
+        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
         let bg = self.colors.background;
         if redraw {
             buf.memset(&bg);
         }
 
+        let fg = if self.mode == Mode::EditingUsername {
+            self.colors.selected
+        } else {
+            self.colors.foreground
+        };
+
         self.prompt_font
-            .auto_draw_text(&mut buf, &bg, &self.colors.foreground, username)?;
+            .auto_draw_text_centered(&mut buf, &bg, &fg, username)?;
+
+        let border = if self.mode == Mode::EditingUsername {
+            self.colors.selected
+        } else {
+            self.colors.neutral
+        };
+        Self::draw_underline(&mut buf, layout.w, layout.row_h, &border);
 
         self.should_refresh = true;
 
@@ -453,13 +441,11 @@ impl<'a> LoginManager<'a> {
     }
 
     fn draw_password(&mut self, password: &str, redraw: bool) -> Result<(), Error> {
-        let (x, y) = self.offset();
-        let layout = self.login_layout();
-        let (x, y) = (x + layout.field_x, y + layout.y_password);
-        let dim = (layout.field_w, layout.row_h);
+        let layout = self.form_layout();
+        let y = layout.password_y;
 
         let mut buf = buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf = buf.subdimensions((x, y, dim.0, dim.1))?;
+        let mut buf = buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
         let bg = self.colors.background;
         if redraw {
             buf.memset(&bg);
@@ -470,8 +456,22 @@ impl<'a> LoginManager<'a> {
             stars += "*";
         }
 
+        let fg = if self.mode == Mode::EditingPassword {
+            self.colors.selected
+        } else {
+            self.colors.foreground
+        };
+
         self.prompt_font
-            .auto_draw_text(&mut buf, &bg, &self.colors.foreground, &stars)?;
+            .auto_draw_text_centered(&mut buf, &bg, &fg, &stars)?;
+
+        // Bottom border under password input.
+        let border = if self.mode == Mode::EditingPassword {
+            self.colors.selected
+        } else {
+            self.colors.neutral
+        };
+        Self::draw_underline(&mut buf, layout.w, layout.row_h, &border);
 
         self.should_refresh = true;
 
@@ -543,6 +543,22 @@ impl<'a> LoginManager<'a> {
                     error!("Fatal: unable to draw background: {e}");
                     return;
                 }
+                if !self.lock_target {
+                    if let Err(e) = self.draw_target() {
+                        error!("Fatal: unable to draw target session: {e}");
+                        return;
+                    }
+                }
+                if self.forced_username.is_none() {
+                    if let Err(e) = self.draw_username(&username, true) {
+                        error!("Fatal: unable to draw username prompt: {e}");
+                        return;
+                    }
+                }
+                if let Err(e) = self.draw_password(&password, true) {
+                    error!("Fatal: unable to draw password prompt: {e}");
+                    return;
+                }
                 last_mode = self.mode;
             }
 
@@ -550,6 +566,22 @@ impl<'a> LoginManager<'a> {
                 let bg = self.colors.neutral;
                 if let Err(e) = self.draw_bg(&bg) {
                     error!("Fatal: unable to draw background: {e}");
+                    return;
+                }
+                if !self.lock_target {
+                    if let Err(e) = self.draw_target() {
+                        error!("Fatal: unable to draw target session: {e}");
+                        return;
+                    }
+                }
+                if self.forced_username.is_none() {
+                    if let Err(e) = self.draw_username(&username, true) {
+                        error!("Fatal: unable to draw username prompt: {e}");
+                        return;
+                    }
+                }
+                if let Err(e) = self.draw_password(&password, true) {
+                    error!("Fatal: unable to draw password prompt: {e}");
                     return;
                 }
                 had_failure = false;
@@ -729,12 +761,26 @@ fn main() {
         Ok(s) => {
             info!("Loaded configuration successfully");
             debug!("Configured fonts: main={:?}, mono={:?}", s.fonts.main, s.fonts.mono);
+            debug!(
+                "Configured login: target={:?} username={:?} gap_px={}, row_h={}",
+                s.login.target,
+                s.login.username,
+                s.login.gap_px,
+                s.login.row_h
+            );
             s
         }
         Err(e) => {
             warn!("Failed to load config; using defaults: {e}");
             let s = settings::Settings::default();
             debug!("Default fonts: main={:?}, mono={:?}", s.fonts.main, s.fonts.mono);
+            debug!(
+                "Default login: target={:?} username={:?} gap_px={}, row_h={}",
+                s.login.target,
+                s.login.username,
+                s.login.gap_px,
+                s.login.row_h
+            );
             s
         }
     };
