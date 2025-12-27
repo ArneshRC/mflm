@@ -218,11 +218,6 @@ impl crate::LoginManager<'_> {
                                 self.mode = crate::Mode::EditingUsername;
                             }
                         } else {
-                            let bg = self.colors.selected;
-                            if let Err(e) = self.draw_bg(&bg) {
-                                error!("Fatal: unable to draw background: {e}");
-                                return;
-                            }
                             info!(
                                 "Attempting login via greetd (session_index={}, username_len={})",
                                 self.target_index,
