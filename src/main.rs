@@ -1,12 +1,17 @@
 #![deny(rust_2018_idioms)]
 
+use std::fs::OpenOptions;
 use std::fs;
+use std::io;
 use std::io::Read;
 use std::path::Path;
 
+use chrono::Local;
 use color::Color;
 use framebuffer::{Framebuffer, KdMode, VarScreeninfo};
 use freedesktop_desktop_entry::DesktopEntry;
+use log::{debug, error, info, warn};
+use simplelog::{Config as LogConfig, LevelFilter, WriteLogger};
 use termion::raw::IntoRawMode;
 use thiserror::Error;
 
@@ -48,11 +53,40 @@ struct Target {
 impl Target {
     fn load<P: AsRef<Path>>(path: P) -> Option<Self> {
         let path = path.as_ref();
-        let data = fs::read_to_string(path).ok()?;
-        let entry = DesktopEntry::decode(path, &data).ok()?;
+        let data = match fs::read_to_string(path) {
+            Ok(data) => data,
+            Err(e) => {
+                debug!("Skipping target at {:?}: failed to read desktop entry: {e}", path);
+                return None;
+            }
+        };
 
-        let cmdline = entry.exec()?;
-        let exec = shell_words::split(cmdline).ok()?;
+        let entry = match DesktopEntry::decode(path, &data) {
+            Ok(entry) => entry,
+            Err(e) => {
+                debug!("Skipping target at {:?}: failed to parse desktop entry: {e}", path);
+                return None;
+            }
+        };
+
+        let cmdline = match entry.exec() {
+            Some(cmdline) => cmdline,
+            None => {
+                debug!("Skipping target at {:?}: missing Exec=", path);
+                return None;
+            }
+        };
+
+        let exec = match shell_words::split(cmdline) {
+            Ok(exec) => exec,
+            Err(e) => {
+                debug!(
+                    "Skipping target at {:?}: failed to parse Exec command line ({cmdline:?}): {e}",
+                    path
+                );
+                return None;
+            }
+        };
 
         let name = entry.name(None).unwrap_or(entry.appid.into()).into_owned();
 
@@ -96,7 +130,7 @@ impl<'a> LoginManager<'a> {
             mode: Mode::EditingUsername,
             greetd,
             targets,
-            target_index: 1, // TODO: remember last user selection
+            target_index: 0, // TODO: remember last user selection
             var_screen_info: &fb.var_screen_info,
             should_refresh: false,
         }
@@ -107,8 +141,9 @@ impl<'a> LoginManager<'a> {
             self.should_refresh = false;
             let mut screeninfo = self.var_screen_info.clone();
             screeninfo.activate |= FB_ACTIVATE_NOW | FB_ACTIVATE_FORCE;
-            Framebuffer::put_var_screeninfo(self.device, &screeninfo)
-                .expect("Failed to refresh framebuffer");
+            if let Err(e) = Framebuffer::put_var_screeninfo(self.device, &screeninfo) {
+                error!("Failed to refresh framebuffer: {e}");
+            }
         }
     }
 
@@ -184,7 +219,7 @@ impl<'a> LoginManager<'a> {
             &mut buf
                 .subdimensions((x, y, self.dimensions.0, self.dimensions.1))?
                 .offset((256, 104))
-                .unwrap(),
+                ?,
             &bg,
             &password_color,
             "password:",
@@ -291,42 +326,64 @@ impl<'a> LoginManager<'a> {
         let stdin_lock = stdin_handle.lock();
         let mut stdin_bytes = stdin_lock.bytes();
 
-        fn quit() -> u8 {
-            Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
-            std::process::exit(1);
-        }
-        let mut read_byte = || stdin_bytes.next().and_then(Result::ok).unwrap_or_else(quit);
+        let mut read_byte = || -> Option<u8> { stdin_bytes.next().and_then(Result::ok) };
 
-        self.draw_target().expect("unable to draw target session");
+        if let Err(e) = self.draw_target() {
+            error!("Fatal: unable to draw target session: {e}");
+            return;
+        }
 
         loop {
             if username.len() != last_username_len {
-                self.draw_username(&username, username.len() < last_username_len)
-                    .expect("unable to draw username prompt");
+                if let Err(e) =
+                    self.draw_username(&username, username.len() < last_username_len)
+                {
+                    error!("Fatal: unable to draw username prompt: {e}");
+                    return;
+                }
                 last_username_len = username.len();
             }
             if password.len() != last_password_len {
-                self.draw_password(&password, password.len() < last_password_len)
-                    .expect("unable to draw username prompt");
+                if let Err(e) =
+                    self.draw_password(&password, password.len() < last_password_len)
+                {
+                    error!("Fatal: unable to draw password prompt: {e}");
+                    return;
+                }
                 last_password_len = password.len();
             }
             if last_target_index != self.target_index {
-                self.draw_target().expect("unable to draw target session");
+                if let Err(e) = self.draw_target() {
+                    error!("Fatal: unable to draw target session: {e}");
+                    return;
+                }
                 last_target_index = self.target_index;
             }
             if last_mode != self.mode {
-                self.draw_bg(&Color::GRAY)
-                    .expect("unable to draw background");
+                if let Err(e) = self.draw_bg(&Color::GRAY) {
+                    error!("Fatal: unable to draw background: {e}");
+                    return;
+                }
                 last_mode = self.mode;
             }
 
             if had_failure {
-                self.draw_bg(&Color::GRAY)
-                    .expect("unable to draw background");
+                if let Err(e) = self.draw_bg(&Color::GRAY) {
+                    error!("Fatal: unable to draw background: {e}");
+                    return;
+                }
                 had_failure = false;
             }
 
-            match read_byte() as char {
+            let b = match read_byte() {
+                Some(b) => b,
+                None => {
+                    warn!("stdin closed; exiting greeter loop");
+                    return;
+                }
+            };
+
+            match b as char {
                 '\x15' | '\x0B' => match self.mode {
                     // ctrl-k/ctrl-u
                     Mode::SelectingSession => (),
@@ -337,7 +394,9 @@ impl<'a> LoginManager<'a> {
                     // ctrl-c/ctrl-D
                     username.clear();
                     password.clear();
-                    self.greetd.cancel();
+                    if let Err(e) = self.greetd.cancel() {
+                        warn!("Failed to cancel greetd session: {e}");
+                    }
                     return;
                 }
                 '\x7F' => match self.mode {
@@ -363,8 +422,15 @@ impl<'a> LoginManager<'a> {
                             username.clear();
                             self.mode = Mode::EditingUsername;
                         } else {
-                            self.draw_bg(&Color::YELLOW)
-                                .expect("unable to draw background");
+                            if let Err(e) = self.draw_bg(&Color::YELLOW) {
+                                error!("Fatal: unable to draw background: {e}");
+                                return;
+                            }
+                            info!(
+                                "Attempting login via greetd (session_index={}, username_len={})",
+                                self.target_index,
+                                username.len()
+                            );
                             let res = self.greetd.login(
                                 username,
                                 password,
@@ -373,12 +439,20 @@ impl<'a> LoginManager<'a> {
                             username = String::with_capacity(USERNAME_CAP);
                             password = String::with_capacity(PASSWORD_CAP);
                             match res {
-                                Ok(_) => return,
-                                Err(_) => {
-                                    self.draw_bg(&Color::RED)
-                                        .expect("unable to draw background");
+                                Ok(_) => {
+                                    info!("Login succeeded; exiting greeter loop");
+                                    return;
+                                }
+                                Err(e) => {
+                                    warn!("Login failed: {e}");
+                                    if let Err(e) = self.draw_bg(&Color::RED) {
+                                        error!("Fatal: unable to draw background: {e}");
+                                        return;
+                                    }
                                     self.mode = Mode::EditingUsername;
-                                    self.greetd.cancel();
+                                    if let Err(e) = self.greetd.cancel() {
+                                        warn!("Failed to cancel greetd session after login failure: {e}");
+                                    }
                                     had_failure = true;
                                 }
                             }
@@ -387,16 +461,16 @@ impl<'a> LoginManager<'a> {
                 },
                 // this is terrible
                 '\x1b' => match read_byte() {
-                    b'[' => match read_byte() {
-                        b'A' => self.goto_prev_mode(),
-                        b'B' => self.goto_next_mode(),
-                        b'C' => match self.mode {
+                    Some(b'[') => match read_byte() {
+                        Some(b'A') => self.goto_prev_mode(),
+                        Some(b'B') => self.goto_next_mode(),
+                        Some(b'C') => match self.mode {
                             Mode::SelectingSession => {
                                 self.target_index = (self.target_index + 1) % self.targets.len()
                             }
                             _ => (), // TODO: cursor
                         },
-                        b'D' => match self.mode {
+                        Some(b'D') => match self.mode {
                             Mode::SelectingSession => {
                                 if self.target_index == 0 {
                                     self.target_index = self.targets.len();
@@ -421,34 +495,105 @@ impl<'a> LoginManager<'a> {
 }
 
 fn main() {
-    let mut framebuffer = Framebuffer::new("/dev/fb0").expect("unable to open framebuffer device");
+    if let Err(e) = init_logging() {
+        // If the log file can't be opened (permissions, missing /var, etc), we
+        // can't reliably provide the requested file logging.
+        eprintln!("Failed to initialize file logger (/var/log/mflm/mflm.log): {e}");
+        return;
+    }
+
+    info!("mflm starting at {}", Local::now().to_rfc3339());
+    debug!("argv: {:?}", std::env::args().collect::<Vec<_>>());
+
+    let mut framebuffer = match Framebuffer::new("/dev/fb0") {
+        Ok(fb) => fb,
+        Err(e) => {
+            error!("Unable to open framebuffer device /dev/fb0: {e}");
+            return;
+        }
+    };
 
     let w = framebuffer.var_screen_info.xres;
     let h = framebuffer.var_screen_info.yres;
 
-    let raw = std::io::stdout()
-        .into_raw_mode()
-        .expect("unable to enter raw mode");
+    let raw = match std::io::stdout().into_raw_mode() {
+        Ok(raw) => raw,
+        Err(e) => {
+            error!("Unable to enter raw mode: {e}");
+            return;
+        }
+    };
 
-    let _ = Framebuffer::set_kd_mode(KdMode::Graphics).expect("unable to enter graphics mode");
+    if let Err(e) = Framebuffer::set_kd_mode(KdMode::Graphics) {
+        error!("Unable to enter graphics mode: {e}");
+        drop(raw);
+        return;
+    }
 
-    let greetd = greetd::GreetD::new();
+    let greetd = match greetd::GreetD::new() {
+        Ok(g) => g,
+        Err(e) => {
+            error!("Unable to connect to greetd: {e}");
+            let _ = Framebuffer::set_kd_mode(KdMode::Text);
+            drop(raw);
+            return;
+        }
+    };
 
-    let targets = ["/usr/share/wayland-sessions", "/usr/share/xsessions"]
-        .iter()
-        .flat_map(fs::read_dir)
-        .flatten()
-        .flatten()
-        .flat_map(|dir_entry| Target::load(dir_entry.path()))
-        .collect();
+    info!("Scanning session targets");
+    let mut targets = Vec::new();
+    for dir in ["/usr/share/wayland-sessions", "/usr/share/xsessions"] {
+        match fs::read_dir(dir) {
+            Ok(rd) => {
+                for entry in rd.flatten() {
+                    if let Some(target) = Target::load(entry.path()) {
+                        targets.push(target);
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Unable to read sessions dir {dir}: {e}");
+            }
+        }
+    }
+
+    if targets.is_empty() {
+        error!("No session targets found; cannot continue");
+        let _ = Framebuffer::set_kd_mode(KdMode::Text);
+        drop(raw);
+        return;
+    }
+
+    info!("Loaded {} session targets", targets.len());
 
     let mut lm = LoginManager::new(&mut framebuffer, (w, h), (1024, 168), greetd, targets);
 
     lm.clear();
-    lm.draw_bg(&Color::GRAY).expect("unable to draw background");
+    if let Err(e) = lm.draw_bg(&Color::GRAY) {
+        error!("Unable to draw background: {e}");
+        let _ = Framebuffer::set_kd_mode(KdMode::Text);
+        drop(raw);
+        return;
+    }
     lm.refresh();
 
     lm.greeter_loop();
-    let _ = Framebuffer::set_kd_mode(KdMode::Text).expect("unable to leave graphics mode");
+    if let Err(e) = Framebuffer::set_kd_mode(KdMode::Text) {
+        error!("Unable to leave graphics mode: {e}");
+    }
     drop(raw);
+}
+
+fn init_logging() -> Result<(), io::Error> {
+    let log_dir = Path::new("/var/log/mflm");
+    let log_path = log_dir.join("mflm.log");
+
+    fs::create_dir_all(log_dir)?;
+    let file = OpenOptions::new().create(true).append(true).open(&log_path)?;
+
+    // Debug = verbose. Simplelog's default config includes timestamps; we also
+    // log a clear startup banner with full date/time.
+    WriteLogger::init(LevelFilter::Debug, LogConfig::default(), file)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    Ok(())
 }

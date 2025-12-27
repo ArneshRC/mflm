@@ -1,40 +1,52 @@
 use std::env;
 use std::error::Error;
-use std::fmt;
 use std::os::unix::net::UnixStream;
-use std::process;
 
 use greetd_ipc::{codec::SyncCodec, AuthMessageType, Request, Response};
-
-#[derive(Debug)]
-struct LoginError(String);
-
-impl fmt::Display for LoginError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "There is an error: {}", self.0)
-    }
-}
-
-impl Error for LoginError {}
+use thiserror::Error as ThisError;
 
 pub struct GreetD {
     pub stream: UnixStream,
 }
 
-impl GreetD {
-    pub fn new() -> Self {
-        let socket = env::var("GREETD_SOCK");
-        if socket.is_err() {
-            eprintln!("GREETD_SOCK must be defined");
-            process::exit(1);
-        }
-        match UnixStream::connect(socket.unwrap()) {
-            Ok(stream) => GreetD { stream },
+#[derive(ThisError, Debug)]
+#[non_exhaustive]
+pub enum GreetDError {
+    #[error("GREETD_SOCK environment variable must be defined: {0}")]
+    MissingSocketEnv(#[from] env::VarError),
 
-            Err(err) => {
-                eprintln!("{}", err);
-                process::exit(1);
-            }
+    #[error("failed to connect to greetd socket at {path:?}: {source}")]
+    Connect {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("greetd IPC error: {0}")]
+    Ipc(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("authentication failed: {0}")]
+    AuthFailed(String),
+}
+
+impl GreetDError {
+    fn ipc<E>(err: E) -> Self
+    where
+        E: Error + Send + Sync + 'static,
+    {
+        Self::Ipc(Box::new(err))
+    }
+}
+
+impl GreetD {
+    pub fn new() -> Result<Self, GreetDError> {
+        let socket = env::var("GREETD_SOCK")?;
+        match UnixStream::connect(&socket) {
+            Ok(stream) => Ok(GreetD { stream }),
+            Err(source) => Err(GreetDError::Connect {
+                path: socket,
+                source,
+            }),
         }
     }
 
@@ -43,41 +55,55 @@ impl GreetD {
         username: String,
         password: String,
         cmd: Vec<String>,
-    ) -> Result<(), Box<dyn Error>> {
-        let _ = Request::CreateSession { username }.write_to(&mut self.stream);
-        let _ = Request::PostAuthMessageResponse {
+    ) -> Result<(), GreetDError> {
+        Request::CreateSession { username }
+            .write_to(&mut self.stream)
+            .map_err(GreetDError::ipc)?;
+
+        Request::PostAuthMessageResponse {
             response: Some(password),
         }
-        .write_to(&mut self.stream);
-        let response = Response::read_from(&mut self.stream)?;
+        .write_to(&mut self.stream)
+        .map_err(GreetDError::ipc)?;
+
+        let response = Response::read_from(&mut self.stream).map_err(GreetDError::ipc)?;
         match response {
             Response::AuthMessage {
                 auth_message: _,
                 auth_message_type,
             } => match auth_message_type {
                 AuthMessageType::Secret => {
-                    let _ = Request::StartSession { cmd }.write_to(&mut self.stream);
-                    let resp = Response::read_from(&mut self.stream)?;
+                    Request::StartSession { cmd }
+                        .write_to(&mut self.stream)
+                        .map_err(GreetDError::ipc)?;
+                    let resp = Response::read_from(&mut self.stream).map_err(GreetDError::ipc)?;
                     match resp {
                         Response::Success => Ok(()),
                         Response::Error { .. } | Response::AuthMessage { .. } => {
-                            Err(Box::new(LoginError("Wrong username or password".into())))
+                            Err(GreetDError::AuthFailed(
+                                "wrong username or password".to_string(),
+                            ))
                         }
                     }
                 }
-                _ => Err(Box::new(LoginError("Wrong username".into()))),
+                _ => Err(GreetDError::AuthFailed("wrong username".to_string())),
             },
             Response::Success => {
-                let _ = Request::StartSession { cmd }.write_to(&mut self.stream);
-                let _ = Response::read_from(&mut self.stream)?;
+                Request::StartSession { cmd }
+                    .write_to(&mut self.stream)
+                    .map_err(GreetDError::ipc)?;
+                let _ = Response::read_from(&mut self.stream).map_err(GreetDError::ipc)?;
                 Ok(())
             }
-            _ => Err(Box::new(LoginError("Unknown error".into()))),
+            _ => Err(GreetDError::AuthFailed("unknown greetd response".to_string())),
         }
     }
 
-    pub fn cancel(&mut self) {
-        let _ = Request::CancelSession.write_to(&mut self.stream);
-        let _ = Response::read_from(&mut self.stream);
+    pub fn cancel(&mut self) -> Result<(), GreetDError> {
+        Request::CancelSession
+            .write_to(&mut self.stream)
+            .map_err(GreetDError::ipc)?;
+        let _ = Response::read_from(&mut self.stream).map_err(GreetDError::ipc)?;
+        Ok(())
     }
 }
