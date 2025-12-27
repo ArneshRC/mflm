@@ -124,6 +124,10 @@ fn default_input_margin_px() -> u32 {
     10
 }
 
+fn default_heading_offset_y_px() -> u32 {
+    24
+}
+
 fn default_session_left_arrow() -> String {
     "❮".to_string()
 }
@@ -166,6 +170,9 @@ pub struct Ui {
     #[serde(default = "default_input_margin_px")]
     pub input_margin_px: u32,
 
+    #[serde(default = "default_heading_offset_y_px")]
+    pub heading_offset_y_px: u32,
+
     #[serde(default = "default_form_width")]
     pub form_width: u32,
 
@@ -190,6 +197,7 @@ impl Default for Ui {
             password_char: default_password_char(),
             text_align: default_text_align(),
             input_margin_px: default_input_margin_px(),
+            heading_offset_y_px: default_heading_offset_y_px(),
             form_width: default_form_width(),
             form_height: default_form_height(),
             session_left_arrow: default_session_left_arrow(),
@@ -234,6 +242,7 @@ impl Settings {
             .set_default("ui.password_char", default_password_char())?
             .set_default("ui.text_align", "center")?
             .set_default("ui.input_margin_px", default_input_margin_px())?
+            .set_default("ui.heading_offset_y_px", default_heading_offset_y_px())?
             .set_default("ui.form_width", default_form_width())?
             .set_default("ui.form_height", default_form_height())?
             .set_default("ui.session_left_arrow", default_session_left_arrow())?

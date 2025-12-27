@@ -212,7 +212,7 @@ impl crate::LoginManager<'_> {
         let hostname = hostname::get()?.to_string_lossy().into_owned();
 
         self.heading_font.auto_draw_text_centered(
-            &mut buf.offset((0, 32))?,
+            &mut buf.offset((0, self.heading_offset_y_px))?,
             &bg,
             &fg,
             &format!("Welcome to {hostname}")
