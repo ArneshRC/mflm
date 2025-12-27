@@ -13,12 +13,26 @@ pub(crate) struct FormLayout {
 impl crate::LoginManager<'_> {
     pub(crate) fn form_layout(&self) -> FormLayout {
         let row_h = self.row_h;
-        let gap = self.gap_px;
+        let gap_below_session_px = self.gap_below_session_px;
+        let gap_below_username_px = self.gap_below_username_px;
 
         let show_session = !self.lock_target;
         let show_username = self.forced_username.is_none();
+
         let rows = (show_session as u32) + (show_username as u32) + 1;
-        let total_h = rows * row_h + rows.saturating_sub(1) * gap;
+
+        let gaps_h = {
+            let mut sum = 0u32;
+            if show_session {
+                sum = sum.saturating_add(gap_below_session_px);
+            }
+            if show_username {
+                sum = sum.saturating_add(gap_below_username_px);
+            }
+            sum
+        };
+
+        let total_h = rows * row_h + gaps_h;
 
         let margin_x = 32;
         let max_w = self.screen_size.0.saturating_sub(margin_x * 2).max(1);
@@ -30,7 +44,7 @@ impl crate::LoginManager<'_> {
         let mut cur_y = y;
         let session_y = if show_session {
             let out = cur_y;
-            cur_y = cur_y.saturating_add(row_h + gap);
+            cur_y = cur_y.saturating_add(row_h + gap_below_session_px);
             Some(out)
         } else {
             None
@@ -38,7 +52,7 @@ impl crate::LoginManager<'_> {
 
         let username_y = if show_username {
             let out = cur_y;
-            cur_y = cur_y.saturating_add(row_h + gap);
+            cur_y = cur_y.saturating_add(row_h + gap_below_username_px);
             Some(out)
         } else {
             None

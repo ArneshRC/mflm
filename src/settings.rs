@@ -84,7 +84,11 @@ pub struct Login {
     pub username: Option<String>
 }
 
-fn default_gap_px() -> u32 {
+fn default_gap_below_session_px() -> u32 {
+    64
+}
+
+fn default_gap_below_username_px() -> u32 {
     32
 }
 
@@ -126,8 +130,11 @@ pub enum TextAlign {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Ui {
-    #[serde(default = "default_gap_px")]
-    pub gap_px: u32,
+    #[serde(default = "default_gap_below_session_px")]
+    pub gap_below_session_px: u32,
+
+    #[serde(default = "default_gap_below_username_px")]
+    pub gap_below_username_px: u32,
 
     #[serde(default = "default_row_h")]
     pub row_h: u32,
@@ -154,7 +161,8 @@ pub struct Ui {
 impl Default for Ui {
     fn default() -> Self {
         Self {
-            gap_px: default_gap_px(),
+            gap_below_session_px: default_gap_below_session_px(),
+            gap_below_username_px: default_gap_below_username_px(),
             row_h: default_row_h(),
             password_char: default_password_char(),
             text_align: default_text_align(),
@@ -194,7 +202,8 @@ impl Settings {
             .set_default("colors.neutral", Colors::default().neutral)?
             .set_default("colors.selected", Colors::default().selected)?
             .set_default("colors.error", Colors::default().error)?
-            .set_default("ui.gap_px", default_gap_px())?
+            .set_default("ui.gap_below_session_px", default_gap_below_session_px())?
+            .set_default("ui.gap_below_username_px", default_gap_below_username_px())?
             .set_default("ui.row_h", default_row_h())?
             .set_default("ui.password_char", default_password_char())?
             .set_default("ui.text_align", "center")?

@@ -103,7 +103,8 @@ struct LoginManager<'a> {
 
     forced_username: Option<String>,
     lock_target: bool,
-    gap_px: u32,
+    gap_below_session_px: u32,
+    gap_below_username_px: u32,
     row_h: u32,
     password_char: String,
     text_align: settings::TextAlign,
@@ -191,7 +192,8 @@ impl<'a> LoginManager<'a> {
             colors,
             forced_username,
             lock_target,
-            gap_px: ui.gap_px,
+            gap_below_session_px: ui.gap_below_session_px,
+            gap_below_username_px: ui.gap_below_username_px,
             row_h: ui.row_h,
             password_char,
             text_align: ui.text_align,
@@ -238,8 +240,9 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Configured ui: gap_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
-                s.ui.gap_px,
+                "Configured ui: gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
+                s.ui.gap_below_session_px,
+                s.ui.gap_below_username_px,
                 s.ui.row_h,
                 s.ui.password_char,
                 s.ui.text_align,
@@ -264,8 +267,9 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Default ui: gap_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
-                s.ui.gap_px,
+                "Default ui: gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
+                s.ui.gap_below_session_px,
+                s.ui.gap_below_username_px,
                 s.ui.row_h,
                 s.ui.password_char,
                 s.ui.text_align,
