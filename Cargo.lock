@@ -233,35 +233,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ddlm"
-version = "0.1.0"
-dependencies = [
- "byteorder",
- "cairo-rs",
- "chrono",
- "config",
- "framebuffer",
- "freedesktop-desktop-entry",
- "getopts",
- "greetd_ipc",
- "hostname",
- "lazy_static",
- "log",
- "memmap",
- "nix",
- "pam",
- "pango",
- "pangocairo",
- "rusttype",
- "serde",
- "shell-words",
- "simplelog",
- "termion",
- "thiserror",
- "users 0.11.0",
-]
-
-[[package]]
 name = "deranged"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -730,6 +701,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "mflm"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+ "cairo-rs",
+ "chrono",
+ "config",
+ "framebuffer",
+ "freedesktop-desktop-entry",
+ "getopts",
+ "greetd_ipc",
+ "hostname",
+ "lazy_static",
+ "log",
+ "memmap",
+ "nix",
+ "pam",
+ "pango",
+ "pangocairo",
+ "rusttype",
+ "serde",
+ "shell-words",
+ "simplelog",
+ "termion",
+ "thiserror",
+ "users 0.11.0",
 ]
 
 [[package]]
