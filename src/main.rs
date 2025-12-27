@@ -105,6 +105,8 @@ struct LoginManager<'a> {
     lock_target: bool,
     gap_px: u32,
     row_h: u32,
+    password_char: String,
+    text_align: settings::TextAlign,
 
     screen_size: (u32, u32),
     dimensions: (u32, u32),
@@ -126,7 +128,8 @@ impl<'a> LoginManager<'a> {
         targets: Vec<Target>,
         fonts: &settings::Fonts,
         colors: settings::ResolvedColors,
-        login: &settings::Login
+        login: &settings::Login,
+        ui: &settings::Ui
     ) -> Self {
         let forced_username = login
             .username
@@ -168,6 +171,13 @@ impl<'a> LoginManager<'a> {
             Mode::EditingUsername
         };
 
+        let password_char = ui.password_char.trim();
+        let password_char = if password_char.is_empty() {
+            "*".to_string()
+        } else {
+            password_char.to_string()
+        };
+
         Self {
             buf: &mut fb.frame,
             device: &fb.device,
@@ -176,8 +186,10 @@ impl<'a> LoginManager<'a> {
             colors,
             forced_username,
             lock_target,
-            gap_px: login.gap_px,
-            row_h: login.row_h,
+            gap_px: ui.gap_px,
+            row_h: ui.row_h,
+            password_char,
+            text_align: ui.text_align,
             screen_size,
             dimensions,
             mode,
@@ -211,11 +223,16 @@ fn main() {
                 s.fonts.main, s.fonts.mono
             );
             debug!(
-                "Configured login: target={:?} username={:?} gap_px={}, row_h={}",
+                "Configured login: target={:?} username={:?}",
                 s.login.target,
-                s.login.username,
-                s.login.gap_px,
-                s.login.row_h
+                s.login.username
+            );
+            debug!(
+                "Configured ui: gap_px={} row_h={} password_char={:?} text_align={:?}",
+                s.ui.gap_px,
+                s.ui.row_h,
+                s.ui.password_char,
+                s.ui.text_align
             );
             s
         }
@@ -227,8 +244,16 @@ fn main() {
                 s.fonts.main, s.fonts.mono
             );
             debug!(
-                "Default login: target={:?} username={:?} gap_px={}, row_h={}",
-                s.login.target, s.login.username, s.login.gap_px, s.login.row_h
+                "Default login: target={:?} username={:?}",
+                s.login.target,
+                s.login.username
+            );
+            debug!(
+                "Default ui: gap_px={} row_h={} password_char={:?} text_align={:?}",
+                s.ui.gap_px,
+                s.ui.row_h,
+                s.ui.password_char,
+                s.ui.text_align
             );
             s
         }
@@ -323,7 +348,8 @@ fn main() {
         targets,
         &settings.fonts,
         colors,
-        &settings.login
+        &settings.login,
+        &settings.ui,
     );
 
     lm.clear();

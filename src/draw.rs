@@ -34,12 +34,13 @@ impl Font {
         }
     }
 
-    fn render_to_surface_centered(
+    fn render_to_surface_aligned(
         &self,
         bg: &Color,
         fg: &Color,
         text: &str,
-        width_px: i32
+        width_px: i32,
+        alignment: pango::Alignment
     ) -> Result<(ImageSurface, i32, i32), DrawError> {
         let width_px = width_px.max(1);
 
@@ -54,7 +55,7 @@ impl Font {
         layout.set_font_description(Some(&self.desc));
         layout.set_text(text);
         layout.set_width(width_px * pango::SCALE);
-        layout.set_alignment(pango::Alignment::Center);
+        layout.set_alignment(alignment);
         let (_w, mut h) = layout.pixel_size();
         h = h.max(1);
 
@@ -78,7 +79,7 @@ impl Font {
         layout.set_font_description(Some(&self.desc));
         layout.set_text(text);
         layout.set_width(width_px * pango::SCALE);
-        layout.set_alignment(pango::Alignment::Center);
+        layout.set_alignment(alignment);
 
         let (fr, fgc, fb, fa) = fg.as_rgba_f32();
         ctx.set_source_rgba(fr, fgc, fb, fa);
@@ -87,18 +88,19 @@ impl Font {
         Ok((surface, width_px, h))
     }
 
-    pub fn auto_draw_text_centered(
+    pub fn auto_draw_text_aligned(
         &mut self,
         buf: &mut Buffer<'_>,
         bg: &Color,
         c: &Color,
-        s: &str
+        s: &str,
+        alignment: pango::Alignment
     ) -> Result<(u32, u32), DrawError> {
         let bounds = buf.get_bounds();
         let width_px = bounds.2 as i32;
 
         let (mut surface, w, h) =
-            self.render_to_surface_centered(bg, c, s, width_px)?;
+            self.render_to_surface_aligned(bg, c, s, width_px, alignment)?;
         surface.flush();
 
         let stride = surface.stride() as usize;
@@ -129,9 +131,19 @@ impl Font {
 
         Ok((w as u32, self.size_px.max(h as f32) as u32))
     }
+
+    pub fn auto_draw_text_centered(
+        &mut self,
+        buf: &mut Buffer<'_>,
+        bg: &Color,
+        c: &Color,
+        s: &str
+    ) -> Result<(u32, u32), DrawError> {
+        self.auto_draw_text_aligned(buf, bg, c, s, pango::Alignment::Center)
+    }
 }
 
-impl<'a> crate::LoginManager<'a> {
+impl crate::LoginManager<'_> {
     pub(crate) fn refresh(&mut self) {
         if self.should_refresh {
             self.should_refresh = false;
@@ -298,8 +310,14 @@ impl<'a> crate::LoginManager<'a> {
             self.colors.foreground
         };
 
+        let align = match self.text_align {
+            crate::settings::TextAlign::Left => pango::Alignment::Left,
+            crate::settings::TextAlign::Center => pango::Alignment::Center,
+            crate::settings::TextAlign::Right => pango::Alignment::Right
+        };
+
         self.prompt_font
-            .auto_draw_text_centered(&mut buf, &bg, &fg, username)?;
+            .auto_draw_text_aligned(&mut buf, &bg, &fg, username, align)?;
 
         let border = if self.mode == crate::Mode::EditingUsername {
             self.colors.selected
@@ -329,9 +347,9 @@ impl<'a> crate::LoginManager<'a> {
             buf.memset(&bg);
         }
 
-        let mut stars = "".to_string();
+        let mut stars = String::new();
         for _ in 0..password.len() {
-            stars += "*";
+            stars.push_str(&self.password_char);
         }
 
         let fg = if self.mode == crate::Mode::EditingPassword {
@@ -340,8 +358,14 @@ impl<'a> crate::LoginManager<'a> {
             self.colors.foreground
         };
 
+        let align = match self.text_align {
+            crate::settings::TextAlign::Left => pango::Alignment::Left,
+            crate::settings::TextAlign::Center => pango::Alignment::Center,
+            crate::settings::TextAlign::Right => pango::Alignment::Right
+        };
+
         self.prompt_font
-            .auto_draw_text_centered(&mut buf, &bg, &fg, &stars)?;
+            .auto_draw_text_aligned(&mut buf, &bg, &fg, &stars, align)?;
 
         // Bottom border under password input.
         let border = if self.mode == crate::Mode::EditingPassword {

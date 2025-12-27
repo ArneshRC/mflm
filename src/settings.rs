@@ -62,15 +62,7 @@ pub struct Login {
     pub target: Option<String>,
 
     /// Optional username to force.
-    pub username: Option<String>,
-
-    /// Vertical gap in pixels between input rows.
-    #[serde(default = "default_gap_px")]
-    pub gap_px: u32,
-
-    /// Height of each input row in pixels.
-    #[serde(default = "default_row_h")]
-    pub row_h: u32
+    pub username: Option<String>
 }
 
 fn default_gap_px() -> u32 {
@@ -81,26 +73,89 @@ fn default_row_h() -> u32 {
     72
 }
 
-impl Default for Login {
+fn default_password_char() -> String {
+    "*".to_string()
+}
+
+fn default_text_align() -> TextAlign {
+    TextAlign::Center
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextAlign {
+    Left,
+    Center,
+    Right
+}
+
+#[derive(Debug, Clone)]
+pub struct Ui {
+    pub gap_px: u32,
+    pub row_h: u32,
+    pub password_char: String,
+    pub text_align: TextAlign
+}
+
+impl Default for Ui {
     fn default() -> Self {
         Self {
-            target: None,
-            username: None,
             gap_px: default_gap_px(),
-            row_h: default_row_h()
+            row_h: default_row_h(),
+            password_char: default_password_char(),
+            text_align: default_text_align()
         }
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct Settings {
-    #[serde(default)]
-    pub fonts: Fonts,
-    #[serde(default)]
-    pub colors: Colors,
+// Raw structs used to preserve backward compatibility with legacy [login]
+// keys (gap_px/row_h/password_char) while moving these to [ui].
+#[derive(Debug, Clone, Default, Deserialize)]
+struct LoginRaw {
+    pub target: Option<String>,
+    pub username: Option<String>,
 
     #[serde(default)]
-    pub login: Login
+    pub gap_px: Option<u32>,
+
+    #[serde(default)]
+    pub row_h: Option<u32>,
+
+    #[serde(default)]
+    pub password_char: Option<String>
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct UiRaw {
+    #[serde(default)]
+    pub gap_px: Option<u32>,
+
+    #[serde(default)]
+    pub row_h: Option<u32>,
+
+    #[serde(default)]
+    pub password_char: Option<String>,
+
+    #[serde(default)]
+    pub text_align: Option<TextAlign>
+}
+
+impl Default for Login {
+    fn default() -> Self {
+        Self {
+            target: None,
+            username: None
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Settings {
+    pub fonts: Fonts,
+    pub colors: Colors,
+
+    pub login: Login,
+    pub ui: Ui
 }
 
 impl Default for Settings {
@@ -108,9 +163,25 @@ impl Default for Settings {
         Self {
             fonts: Fonts::default(),
             colors: Colors::default(),
-            login: Login::default()
+            login: Login::default(),
+            ui: Ui::default()
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SettingsRaw {
+    #[serde(default)]
+    pub fonts: Fonts,
+
+    #[serde(default)]
+    pub colors: Colors,
+
+    #[serde(default)]
+    pub login: LoginRaw,
+
+    #[serde(default)]
+    pub ui: UiRaw
 }
 
 impl Settings {
@@ -124,8 +195,15 @@ impl Settings {
             .set_default("colors.neutral", Colors::default().neutral)?
             .set_default("colors.selected", Colors::default().selected)?
             .set_default("colors.error", Colors::default().error)?
+            // New UI category (preferred)
+            .set_default("ui.gap_px", default_gap_px())?
+            .set_default("ui.row_h", default_row_h())?
+            .set_default("ui.password_char", default_password_char())?
+            .set_default("ui.text_align", "center")?
+            // Legacy keys kept for compatibility (if /etc config still uses [login])
             .set_default("login.gap_px", default_gap_px())?
             .set_default("login.row_h", default_row_h())?
+            .set_default("login.password_char", default_password_char())?
             .add_source(
                 config::File::from(std::path::Path::new(
                     "/etc/mflm/config.toml"
@@ -135,7 +213,48 @@ impl Settings {
             );
 
         let cfg = builder.build()?;
-        cfg.try_deserialize::<Self>()
+
+        let raw = cfg.try_deserialize::<SettingsRaw>()?;
+
+        let gap_px = raw
+            .ui
+            .gap_px
+            .or(raw.login.gap_px)
+            .unwrap_or_else(default_gap_px);
+        let row_h = raw
+            .ui
+            .row_h
+            .or(raw.login.row_h)
+            .unwrap_or_else(default_row_h);
+        let password_char = raw
+            .ui
+            .password_char
+            .or(raw.login.password_char)
+            .unwrap_or_else(default_password_char);
+        let password_char = {
+            let s = password_char.trim();
+            if s.is_empty() {
+                default_password_char()
+            } else {
+                s.to_string()
+            }
+        };
+        let text_align = raw.ui.text_align.unwrap_or_else(default_text_align);
+
+        Ok(Self {
+            fonts: raw.fonts,
+            colors: raw.colors,
+            login: Login {
+                target: raw.login.target,
+                username: raw.login.username
+            },
+            ui: Ui {
+                gap_px,
+                row_h,
+                password_char,
+                text_align
+            }
+        })
     }
 
     pub fn resolve_colors(&self) -> Result<ResolvedColors, ParseColorError> {
