@@ -103,6 +103,8 @@ struct LoginManager<'a> {
 
     forced_username: Option<String>,
     lock_target: bool,
+    hide_target: bool,
+    hide_username: bool,
     gap_below_session_px: u32,
     gap_below_username_px: u32,
     row_h: u32,
@@ -141,7 +143,7 @@ impl<'a> LoginManager<'a> {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
 
-        let (target_index, lock_target) = match login
+        let (target_index, forced_target_found) = match login
             .target
             .as_deref()
             .map(str::trim)
@@ -150,7 +152,7 @@ impl<'a> LoginManager<'a> {
             Some(forced) => match targets.iter().position(|t| t.name == forced)
             {
                 Some(i) => {
-                    info!("Forcing target session from config: {forced:?}");
+                    info!("Using configured target session as default: {forced:?}");
                     (i, true)
                 }
                 None => {
@@ -163,12 +165,14 @@ impl<'a> LoginManager<'a> {
             None => (0, false)
         };
 
+        let lock_target = forced_target_found && ui.hide_target;
+
         if let Some(u) = forced_username.as_deref() {
             info!("Forcing username from config (len={})", u.len());
             debug!("Forced username: {u:?}");
         }
 
-        let mode = if forced_username.is_some() {
+        let mode = if forced_username.is_some() && ui.hide_username {
             Mode::EditingPassword
         } else {
             Mode::EditingUsername
@@ -192,6 +196,8 @@ impl<'a> LoginManager<'a> {
             colors,
             forced_username,
             lock_target,
+            hide_target: ui.hide_target,
+            hide_username: ui.hide_username,
             gap_below_session_px: ui.gap_below_session_px,
             gap_below_username_px: ui.gap_below_username_px,
             row_h: ui.row_h,
@@ -207,6 +213,22 @@ impl<'a> LoginManager<'a> {
             target_index, // TODO: remember last user selection
             var_screen_info: &fb.var_screen_info,
             should_refresh: false
+        }
+    }
+
+    pub(crate) fn show_target_row(&self) -> bool {
+        if self.lock_target {
+            !self.hide_target
+        } else {
+            true
+        }
+    }
+
+    pub(crate) fn show_username_row(&self) -> bool {
+        if self.forced_username.is_some() {
+            !self.hide_username
+        } else {
+            true
         }
     }
 }
@@ -240,7 +262,9 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Configured ui: gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
+                "Configured ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
+                s.ui.hide_target,
+                s.ui.hide_username,
                 s.ui.gap_below_session_px,
                 s.ui.gap_below_username_px,
                 s.ui.row_h,
@@ -267,7 +291,9 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Default ui: gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
+                "Default ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} form_width={} form_height={}",
+                s.ui.hide_target,
+                s.ui.hide_username,
                 s.ui.gap_below_session_px,
                 s.ui.gap_below_username_px,
                 s.ui.row_h,

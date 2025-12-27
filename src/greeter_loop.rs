@@ -5,8 +5,8 @@ use log::{error, info, warn};
 impl crate::LoginManager<'_> {
     fn mode_allowed(&self, mode: crate::Mode) -> bool {
         match mode {
-            crate::Mode::SelectingSession => !self.lock_target,
-            crate::Mode::EditingUsername => self.forced_username.is_none(),
+            crate::Mode::SelectingSession => self.show_target_row(),
+            crate::Mode::EditingUsername => self.show_username_row(),
             crate::Mode::EditingPassword => true
         }
     }
@@ -68,17 +68,23 @@ impl crate::LoginManager<'_> {
         let mut read_byte =
             || -> Option<u8> { stdin_bytes.next().and_then(Result::ok) };
 
-        if !self.lock_target {
+        if self.show_target_row() {
             if let Err(e) = self.draw_target() {
                 error!("Fatal: unable to draw target session: {e}");
                 return;
             }
         }
 
+        if self.show_username_row() {
+            if let Err(e) = self.draw_username(&username, true) {
+                error!("Fatal: unable to draw username prompt: {e}");
+                return;
+            }
+            last_username_len = username.len();
+        }
+
         loop {
-            if self.forced_username.is_none()
-                && username.len() != last_username_len
-            {
+            if self.show_username_row() && username.len() != last_username_len {
                 if let Err(e) = self.draw_username(
                     &username,
                     username.len() < last_username_len
@@ -98,7 +104,7 @@ impl crate::LoginManager<'_> {
                 }
                 last_password_len = password.len();
             }
-            if !self.lock_target && last_target_index != self.target_index {
+            if self.show_target_row() && last_target_index != self.target_index {
                 if let Err(e) = self.draw_target() {
                     error!("Fatal: unable to draw target session: {e}");
                     return;
@@ -111,13 +117,13 @@ impl crate::LoginManager<'_> {
                     error!("Fatal: unable to draw background: {e}");
                     return;
                 }
-                if !self.lock_target {
+                if self.show_target_row() {
                     if let Err(e) = self.draw_target() {
                         error!("Fatal: unable to draw target session: {e}");
                         return;
                     }
                 }
-                if self.forced_username.is_none() {
+                if self.show_username_row() {
                     if let Err(e) = self.draw_username(&username, true) {
                         error!("Fatal: unable to draw username prompt: {e}");
                         return;
@@ -136,13 +142,13 @@ impl crate::LoginManager<'_> {
                     error!("Fatal: unable to draw background: {e}");
                     return;
                 }
-                if !self.lock_target {
+                if self.show_target_row() {
                     if let Err(e) = self.draw_target() {
                         error!("Fatal: unable to draw target session: {e}");
                         return;
                     }
                 }
-                if self.forced_username.is_none() {
+                if self.show_username_row() {
                     if let Err(e) = self.draw_username(&username, true) {
                         error!("Fatal: unable to draw username prompt: {e}");
                         return;
@@ -168,9 +174,7 @@ impl crate::LoginManager<'_> {
                     // ctrl-k/ctrl-u
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
-                        if self.forced_username.is_none() {
-                            username.clear();
-                        }
+                        username.clear();
                     }
                     crate::Mode::EditingPassword => password.clear()
                 },
@@ -187,9 +191,7 @@ impl crate::LoginManager<'_> {
                     // backspace
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
-                        if self.forced_username.is_none() {
-                            username.pop();
-                        }
+                        username.pop();
                     }
                     crate::Mode::EditingPassword => {
                         password.pop();
@@ -198,22 +200,20 @@ impl crate::LoginManager<'_> {
                 '\t' => self.goto_next_mode(),
                 '\r' => match self.mode {
                     crate::Mode::SelectingSession => {
-                        self.mode = if self.forced_username.is_some() {
-                            crate::Mode::EditingPassword
-                        } else {
+                        self.mode = if self.show_username_row() {
                             crate::Mode::EditingUsername
+                        } else {
+                            crate::Mode::EditingPassword
                         };
                     }
                     crate::Mode::EditingUsername => {
-                        if self.forced_username.is_none()
-                            && !username.is_empty()
-                        {
+                        if !username.is_empty() {
                             self.mode = crate::Mode::EditingPassword;
                         }
                     }
                     crate::Mode::EditingPassword => {
                         if password.is_empty() {
-                            if self.forced_username.is_none() {
+                            if self.show_username_row() {
                                 username.clear();
                                 self.mode = crate::Mode::EditingUsername;
                             }
@@ -229,10 +229,13 @@ impl crate::LoginManager<'_> {
                                 username.len()
                             );
 
-                            let username_for_login = self
-                                .forced_username
-                                .clone()
-                                .unwrap_or_else(|| username.clone());
+                            let username_for_login = if self.show_username_row() {
+                                username.clone()
+                            } else {
+                                self.forced_username
+                                    .clone()
+                                    .unwrap_or_else(|| username.clone())
+                            };
                             let password_for_login =
                                 std::mem::take(&mut password);
                             let res = self.greetd.login(
@@ -241,7 +244,7 @@ impl crate::LoginManager<'_> {
                                 self.targets[self.target_index].exec.clone()
                             );
 
-                            if self.forced_username.is_none() {
+                            if self.show_username_row() {
                                 username =
                                     String::with_capacity(crate::USERNAME_CAP);
                             } else {
@@ -265,10 +268,10 @@ impl crate::LoginManager<'_> {
                                         return;
                                     }
                                     self.mode =
-                                        if self.forced_username.is_some() {
-                                            crate::Mode::EditingPassword
-                                        } else {
+                                        if self.show_username_row() {
                                             crate::Mode::EditingUsername
+                                        } else {
+                                            crate::Mode::EditingPassword
                                         };
                                     if let Err(e) = self.greetd.cancel() {
                                         warn!("Failed to cancel greetd session after login failure: {e}");
@@ -283,11 +286,11 @@ impl crate::LoginManager<'_> {
                 '\x1b' => if let Some(b'[') = read_byte() { match read_byte() {
                     Some(b'A') => self.goto_prev_mode(),
                     Some(b'B') => self.goto_next_mode(),
-                    Some(b'C') => if self.mode == crate::Mode::SelectingSession && !self.lock_target {
+                    Some(b'C') => if self.mode == crate::Mode::SelectingSession && self.show_target_row() {
                         self.target_index = (self.target_index + 1)
                             % self.targets.len()
                     },
-                    Some(b'D') => if self.mode == crate::Mode::SelectingSession && !self.lock_target {
+                    Some(b'D') => if self.mode == crate::Mode::SelectingSession && self.show_target_row() {
                             if self.target_index == 0 {
                                 self.target_index = self.targets.len();
                             }
@@ -299,9 +302,7 @@ impl crate::LoginManager<'_> {
                 v => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
-                        if self.forced_username.is_none() {
-                            username.push(v)
-                        }
+                        username.push(v)
                     }
                     crate::Mode::EditingPassword => password.push(v)
                 }

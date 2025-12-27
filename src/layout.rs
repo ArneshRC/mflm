@@ -16,8 +16,8 @@ impl crate::LoginManager<'_> {
         let gap_below_session_px = self.gap_below_session_px;
         let gap_below_username_px = self.gap_below_username_px;
 
-        let show_session = !self.lock_target;
-        let show_username = self.forced_username.is_none();
+        let show_session = self.show_target_row();
+        let show_username = self.show_username_row();
 
         let rows = (show_session as u32) + (show_username as u32) + 1;
 

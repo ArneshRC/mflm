@@ -104,6 +104,14 @@ fn default_text_align() -> TextAlign {
     TextAlign::Center
 }
 
+fn default_hide_target() -> bool {
+    false
+}
+
+fn default_hide_username() -> bool {
+    false
+}
+
 fn default_form_width() -> u32 {
     512
 }
@@ -130,6 +138,12 @@ pub enum TextAlign {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Ui {
+    #[serde(default = "default_hide_target")]
+    pub hide_target: bool,
+
+    #[serde(default = "default_hide_username")]
+    pub hide_username: bool,
+
     #[serde(default = "default_gap_below_session_px")]
     pub gap_below_session_px: u32,
 
@@ -161,6 +175,8 @@ pub struct Ui {
 impl Default for Ui {
     fn default() -> Self {
         Self {
+            hide_target: default_hide_target(),
+            hide_username: default_hide_username(),
             gap_below_session_px: default_gap_below_session_px(),
             gap_below_username_px: default_gap_below_username_px(),
             row_h: default_row_h(),
@@ -202,6 +218,8 @@ impl Settings {
             .set_default("colors.neutral", Colors::default().neutral)?
             .set_default("colors.selected", Colors::default().selected)?
             .set_default("colors.error", Colors::default().error)?
+            .set_default("ui.hide_target", default_hide_target())?
+            .set_default("ui.hide_username", default_hide_username())?
             .set_default("ui.gap_below_session_px", default_gap_below_session_px())?
             .set_default("ui.gap_below_username_px", default_gap_below_username_px())?
             .set_default("ui.row_h", default_row_h())?
