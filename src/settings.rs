@@ -38,11 +38,11 @@ pub struct Colors {
 impl Default for Colors {
     fn default() -> Self {
         Self {
-            foreground: "#FFFFFF".to_string(),
+            foreground: "#fafafa".to_string(),
             background: "#000000".to_string(),
-            neutral: "#BFBFBF".to_string(),
-            selected: "#BFBF3F".to_string(),
-            error: "#BF3F3F".to_string()
+            neutral: "#cccccc".to_string(),
+            selected: "#aaccee".to_string(),
+            error: "#ecbcad".to_string()
         }
     }
 }
@@ -97,11 +97,11 @@ fn default_row_h() -> u32 {
 }
 
 fn default_password_char() -> String {
-    "*".to_string()
+    "•".to_string()
 }
 
 fn default_text_align() -> TextAlign {
-    TextAlign::Center
+    TextAlign::Left
 }
 
 fn default_hide_target() -> bool {
@@ -121,7 +121,7 @@ fn default_form_height() -> u32 {
 }
 
 fn default_input_margin_px() -> u32 {
-    10
+    15
 }
 
 fn default_heading_offset_y_px() -> u32 {
