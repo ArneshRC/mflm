@@ -253,6 +253,21 @@ impl crate::LoginManager<'_> {
                                     info!(
                                         "Login succeeded; exiting greeter loop"
                                     );
+
+                                    if self.blackout_on_success {
+                                        let mut buf = crate::buffer::Buffer::new(
+                                            self.buf,
+                                            self.screen_size
+                                        );
+                                        buf.memset(&crate::color::Color::from_rgba_u8(
+                                            0,
+                                            0,
+                                            0,
+                                            0xFF
+                                        ));
+                                        self.should_refresh = true;
+                                        self.refresh();
+                                    }
                                     return;
                                 }
                                 Err(e) => {

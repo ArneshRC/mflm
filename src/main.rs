@@ -112,6 +112,7 @@ struct LoginManager<'a> {
     text_align: settings::TextAlign,
     input_margin_px: u32,
     heading_offset_y_px: u32,
+    blackout_on_success: bool,
     session_left_arrow: String,
     session_right_arrow: String,
 
@@ -207,6 +208,7 @@ impl<'a> LoginManager<'a> {
             text_align: ui.text_align,
             input_margin_px: ui.input_margin_px,
             heading_offset_y_px: ui.heading_offset_y_px,
+            blackout_on_success: ui.blackout_on_success,
             session_left_arrow,
             session_right_arrow,
             screen_size,
@@ -266,7 +268,7 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Configured ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} input_margin_px={} heading_offset_y_px={} form_width={} form_height={}",
+                "Configured ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} input_margin_px={} heading_offset_y_px={} blackout_on_success={} form_width={} form_height={}",
                 s.ui.hide_target,
                 s.ui.hide_username,
                 s.ui.gap_below_session_px,
@@ -276,6 +278,7 @@ fn main() {
                 s.ui.text_align,
                 s.ui.input_margin_px,
                 s.ui.heading_offset_y_px,
+                s.ui.blackout_on_success,
                 s.ui.form_width,
                 s.ui.form_height
             );
@@ -297,7 +300,7 @@ fn main() {
                 s.login.username
             );
             debug!(
-                "Default ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} input_margin_px={} heading_offset_y_px={} form_width={} form_height={}",
+                "Default ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} input_margin_px={} heading_offset_y_px={} blackout_on_success={} form_width={} form_height={}",
                 s.ui.hide_target,
                 s.ui.hide_username,
                 s.ui.gap_below_session_px,
@@ -307,6 +310,7 @@ fn main() {
                 s.ui.text_align,
                 s.ui.input_margin_px,
                 s.ui.heading_offset_y_px,
+                s.ui.blackout_on_success,
                 s.ui.form_width,
                 s.ui.form_height
             );

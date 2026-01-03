@@ -92,6 +92,10 @@ fn default_gap_below_username_px() -> u32 {
     32
 }
 
+fn default_blackout_on_success() -> bool {
+    true
+}
+
 fn default_row_h() -> u32 {
     72
 }
@@ -173,6 +177,9 @@ pub struct Ui {
     #[serde(default = "default_heading_offset_y_px")]
     pub heading_offset_y_px: u32,
 
+    #[serde(default = "default_blackout_on_success")]
+    pub blackout_on_success: bool,
+
     #[serde(default = "default_form_width")]
     pub form_width: u32,
 
@@ -198,6 +205,7 @@ impl Default for Ui {
             text_align: default_text_align(),
             input_margin_px: default_input_margin_px(),
             heading_offset_y_px: default_heading_offset_y_px(),
+            blackout_on_success: default_blackout_on_success(),
             form_width: default_form_width(),
             form_height: default_form_height(),
             session_left_arrow: default_session_left_arrow(),
@@ -247,6 +255,7 @@ impl Settings {
             .set_default("ui.form_height", default_form_height())?
             .set_default("ui.session_left_arrow", default_session_left_arrow())?
             .set_default("ui.session_right_arrow", default_session_right_arrow())?
+            .set_default("ui.blackout_on_success", default_blackout_on_success())?
             .add_source(
                 config::File::from(std::path::Path::new(
                     "/etc/mflm/config.toml"
