@@ -24,6 +24,7 @@ mod greetd;
 mod greeter_loop;
 mod layout;
 mod settings;
+mod vt;
 
 #[derive(PartialEq, Copy, Clone)]
 enum Mode {

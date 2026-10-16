@@ -1,5 +1,3 @@
-use std::io::Read;
-
 use log::{error, info, warn};
 
 impl crate::LoginManager<'_> {
@@ -59,14 +57,9 @@ impl crate::LoginManager<'_> {
         let mut last_password_len = password.len();
         let mut last_target_index = self.target_index;
         let mut last_mode = self.mode;
-        let mut had_failure = false;
+        let mut needs_redraw = false;
 
-        let stdin_handle = std::io::stdin();
-        let stdin_lock = stdin_handle.lock();
-        let mut stdin_bytes = stdin_lock.bytes();
-
-        let mut read_byte =
-            || -> Option<u8> { stdin_bytes.next().and_then(Result::ok) };
+        let mut tty = crate::vt::Tty::new();
 
         if self.show_target_row() {
             if let Err(e) = self.draw_target() {
@@ -136,7 +129,8 @@ impl crate::LoginManager<'_> {
                 last_mode = self.mode;
             }
 
-            if had_failure {
+            if needs_redraw {
+                self.clear();
                 let bg = self.colors.neutral;
                 if let Err(e) = self.draw_bg(&bg) {
                     error!("Fatal: unable to draw background: {e}");
@@ -158,12 +152,17 @@ impl crate::LoginManager<'_> {
                     error!("Fatal: unable to draw password prompt: {e}");
                     return;
                 }
-                had_failure = false;
+                needs_redraw = false;
+                self.refresh();
             }
 
-            let b = match read_byte() {
-                Some(b) => b,
-                None => {
+            let b = match tty.next_event() {
+                crate::vt::Event::Byte(b) => b,
+                crate::vt::Event::Redraw => {
+                    needs_redraw = true;
+                    continue;
+                }
+                crate::vt::Event::Eof => {
                     warn!("stdin closed; exiting greeter loop");
                     return;
                 }
@@ -274,14 +273,14 @@ impl crate::LoginManager<'_> {
                                     if let Err(e) = self.greetd.cancel() {
                                         warn!("Failed to cancel greetd session after login failure: {e}");
                                     }
-                                    had_failure = true;
+                                    needs_redraw = true;
                                 }
                             }
                         }
                     }
                 },
                 // this is terrible
-                '\x1b' => if let Some(b'[') = read_byte() { match read_byte() {
+                '\x1b' => if let Some(b'[') = tty.next_byte() { match tty.next_byte() {
                     Some(b'A') => self.goto_prev_mode(),
                     Some(b'B') => self.goto_next_mode(),
                     Some(b'C') => if self.mode == crate::Mode::SelectingSession && self.show_target_row() {
