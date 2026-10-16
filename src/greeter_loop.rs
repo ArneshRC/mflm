@@ -239,13 +239,6 @@ impl crate::LoginManager<'_> {
                                 self.targets[self.target_index].exec.clone()
                             );
 
-                            if self.show_username_row() {
-                                username =
-                                    String::with_capacity(crate::USERNAME_CAP);
-                            } else {
-                                username =
-                                    self.forced_username.clone().unwrap();
-                            }
                             password =
                                 String::with_capacity(crate::PASSWORD_CAP);
                             match res {
@@ -277,12 +270,7 @@ impl crate::LoginManager<'_> {
                                         error!("Fatal: unable to draw background: {e}");
                                         return;
                                     }
-                                    self.mode =
-                                        if self.show_username_row() {
-                                            crate::Mode::EditingUsername
-                                        } else {
-                                            crate::Mode::EditingPassword
-                                        };
+                                    self.mode = crate::Mode::EditingPassword;
                                     if let Err(e) = self.greetd.cancel() {
                                         warn!("Failed to cancel greetd session after login failure: {e}");
                                     }

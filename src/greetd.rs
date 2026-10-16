@@ -48,67 +48,64 @@ impl GreetD {
         }
     }
 
+    // every request gets exactly one response; reading them in lockstep keeps
+    // the stream in sync across failed attempts
+    fn request(&mut self, req: Request) -> Result<Response, GreetDError> {
+        req.write_to(&mut self.stream).map_err(GreetDError::ipc)?;
+        Response::read_from(&mut self.stream).map_err(GreetDError::ipc)
+    }
+
     pub fn login(
         &mut self,
         username: String,
         password: String,
         cmd: Vec<String>
     ) -> Result<(), GreetDError> {
-        Request::CreateSession { username }
-            .write_to(&mut self.stream)
-            .map_err(GreetDError::ipc)?;
-
-        Request::PostAuthMessageResponse {
-            response: Some(password)
-        }
-        .write_to(&mut self.stream)
-        .map_err(GreetDError::ipc)?;
-
-        let response =
-            Response::read_from(&mut self.stream).map_err(GreetDError::ipc)?;
-        match response {
-            Response::AuthMessage {
-                auth_message: _,
-                auth_message_type
-            } => match auth_message_type {
-                AuthMessageType::Secret => {
-                    Request::StartSession { cmd }
-                        .write_to(&mut self.stream)
-                        .map_err(GreetDError::ipc)?;
-                    let resp = Response::read_from(&mut self.stream)
-                        .map_err(GreetDError::ipc)?;
-                    match resp {
-                        Response::Success => Ok(()),
-                        Response::Error { .. }
-                        | Response::AuthMessage { .. } => {
-                            Err(GreetDError::AuthFailed(
-                                "wrong username or password".to_string()
-                            ))
+        let mut password = Some(password);
+        let mut response = self.request(Request::CreateSession { username })?;
+        loop {
+            response = match response {
+                Response::AuthMessage {
+                    auth_message_type, ..
+                } => {
+                    let reply = match auth_message_type {
+                        AuthMessageType::Secret | AuthMessageType::Visible => {
+                            match password.take() {
+                                Some(p) => Some(p),
+                                None => {
+                                    return Err(GreetDError::AuthFailed(
+                                        "unsupported additional auth prompt"
+                                            .to_string()
+                                    ))
+                                }
+                            }
                         }
-                    }
+                        AuthMessageType::Info | AuthMessageType::Error => None
+                    };
+                    self.request(Request::PostAuthMessageResponse {
+                        response: reply
+                    })?
                 }
-                _ => Err(GreetDError::AuthFailed("wrong username".to_string()))
-            },
-            Response::Success => {
-                Request::StartSession { cmd }
-                    .write_to(&mut self.stream)
-                    .map_err(GreetDError::ipc)?;
-                let _ = Response::read_from(&mut self.stream)
-                    .map_err(GreetDError::ipc)?;
-                Ok(())
+                Response::Success => break,
+                Response::Error { description, .. } => {
+                    return Err(GreetDError::AuthFailed(description))
+                }
+            };
+        }
+
+        match self.request(Request::StartSession { cmd })? {
+            Response::Success => Ok(()),
+            Response::Error { description, .. } => {
+                Err(GreetDError::AuthFailed(description))
             }
-            _ => Err(GreetDError::AuthFailed(
-                "unknown greetd response".to_string()
+            Response::AuthMessage { .. } => Err(GreetDError::AuthFailed(
+                "unexpected auth message on session start".to_string()
             ))
         }
     }
 
     pub fn cancel(&mut self) -> Result<(), GreetDError> {
-        Request::CancelSession
-            .write_to(&mut self.stream)
-            .map_err(GreetDError::ipc)?;
-        let _ =
-            Response::read_from(&mut self.stream).map_err(GreetDError::ipc)?;
+        self.request(Request::CancelSession)?;
         Ok(())
     }
 }
