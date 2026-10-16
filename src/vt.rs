@@ -107,8 +107,29 @@ fn decode(first: u8, mut next: impl FnMut() -> Option<u8>) -> Key {
         },
         0x01..=0x1A => Key::Ctrl((first + 0x60) as char),
         0x00..=0x1F => Key::Unknown,
-        b => Key::Char(b as char)
+        0x20..=0x7E => Key::Char(first as char),
+        _ => decode_utf8(first, next)
     }
+}
+
+fn decode_utf8(first: u8, mut next: impl FnMut() -> Option<u8>) -> Key {
+    let len = match first {
+        0xC2..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF4 => 4,
+        _ => return Key::Unknown
+    };
+    let mut bytes = [first, 0, 0, 0];
+    for b in bytes.iter_mut().take(len).skip(1) {
+        match next() {
+            Some(c @ 0x80..=0xBF) => *b = c,
+            _ => return Key::Unknown
+        }
+    }
+    std::str::from_utf8(&bytes[..len])
+        .ok()
+        .and_then(|s| s.chars().next())
+        .map_or(Key::Unknown, Key::Char)
 }
 
 fn decode_csi(mut next: impl FnMut() -> Option<u8>) -> Key {
@@ -316,6 +337,19 @@ mod tests {
         assert_eq!(key(b"\x7f"), Key::Backspace);
         assert_eq!(key(b"\x15"), Key::Ctrl('u'));
         assert_eq!(key(b"\x03"), Key::Ctrl('c'));
+    }
+
+    #[test]
+    fn utf8() {
+        assert_eq!(key("é".as_bytes()), Key::Char('é'));
+        assert_eq!(key("€".as_bytes()), Key::Char('€'));
+        assert_eq!(key("🔑".as_bytes()), Key::Char('🔑'));
+        // truncated / invalid sequences
+        assert_eq!(key(b"\xc3"), Key::Unknown);
+        assert_eq!(key(b"\xc3A"), Key::Unknown);
+        assert_eq!(key(b"\xff"), Key::Unknown);
+        // overlong encoding
+        assert_eq!(key(b"\xe0\x80\xaf"), Key::Unknown);
     }
 
     #[test]

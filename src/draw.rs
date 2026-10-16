@@ -414,7 +414,7 @@ impl crate::LoginManager<'_> {
         }
 
         let mut stars = String::new();
-        for _ in 0..password.len() {
+        for _ in 0..password.chars().count() {
             stars.push_str(&self.password_char);
         }
 
