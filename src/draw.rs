@@ -264,6 +264,7 @@ impl crate::LoginManager<'_> {
             Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
         }
 
+        self.draw_status()?;
         self.draw_power_row()?;
 
         self.should_refresh = true;
@@ -298,6 +299,34 @@ impl crate::LoginManager<'_> {
             ))?;
             self.power_font
                 .auto_draw_text_centered(&mut text, &bg, &fg, &item.text)?;
+        }
+
+        self.should_refresh = true;
+
+        Ok(())
+    }
+
+    pub(crate) fn draw_status(&mut self) -> Result<(), crate::Error> {
+        let (y, h) = match self.status_layout() {
+            Some(layout) => layout,
+            None => return Ok(())
+        };
+
+        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
+        let mut line = buf.subdimensions((0, y, self.screen_size.0, h))?;
+        let bg = self.colors.background;
+        line.memset(&bg);
+
+        let (fg, text) = match &self.status {
+            Some(crate::Status::Info(text)) => (self.colors.neutral, text),
+            Some(crate::Status::Error(text)) => (self.colors.error, text),
+            None => {
+                self.should_refresh = true;
+                return Ok(());
+            }
+        };
+        if let Some(font) = self.status_font.as_mut() {
+            font.auto_draw_text_centered(&mut line, &bg, &fg, text)?;
         }
 
         self.should_refresh = true;

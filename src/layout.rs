@@ -61,6 +61,21 @@ impl crate::LoginManager<'_> {
         Some(PowerRowLayout { y, h, xs })
     }
 
+    /// Top and height of the status line below the form, or None if it is
+    /// hidden or does not fit on screen.
+    pub(crate) fn status_layout(&self) -> Option<(u32, u32)> {
+        self.status_font.as_ref()?;
+        let form = self.form_layout();
+        let y = form
+            .y
+            .checked_add(form.total_h)?
+            .checked_add(self.status_offset_y_px)?;
+        if y.checked_add(self.status_h)? > self.screen_size.1 {
+            return None;
+        }
+        Some((y, self.status_h))
+    }
+
     pub(crate) fn form_layout(&self) -> FormLayout {
         let row_h = self.row_h;
         let gap_below_session_px = self.gap_below_session_px;

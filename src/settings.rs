@@ -141,6 +141,30 @@ impl Default for Power {
     }
 }
 
+/// Line below the form showing "Logging in…", "Login failed" and similar.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Status {
+    /// When false, errors flash the form in the error color instead.
+    pub show: bool,
+    /// Pango font description. Defaults to `fonts.main`.
+    pub font: Option<String>,
+    pub size_px: f32,
+    /// Gap between the bottom of the form and the line.
+    pub offset_y_px: u32
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self {
+            show: true,
+            font: None,
+            size_px: 18.0,
+            offset_y_px: 24
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TextAlign {
@@ -197,6 +221,7 @@ pub struct Settings {
     pub login: Login,
     pub header: Header,
     pub power: Power,
+    pub status: Status,
     pub ui: Ui
 }
 

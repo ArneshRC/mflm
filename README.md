@@ -99,6 +99,20 @@ command = ["loginctl", "reboot"]   # optional, defaults to `systemctl <verb>`
 Commands run directly (no shell) as the greeter user, so that user must be
 allowed to power off, e.g. via polkit or logind.
 
+## Status line
+
+A line below the form shows what is happening: `Logging in…`, `Login failed`,
+or e.g. `Shutdown failed` if a power action fails. Errors are drawn in
+`colors.error` and cleared by the next key press.
+
+```toml
+[status]
+show = true               # false flashes the form in the error color instead
+font = "Sans"             # defaults to fonts.main
+size_px = 18
+offset_y_px = 24          # between the form and the line
+```
+
 # Future plans:
 * Add modules on the headline (datetime etc.)
 

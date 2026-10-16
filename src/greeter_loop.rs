@@ -53,6 +53,26 @@ impl crate::LoginManager<'_> {
         Ok(())
     }
 
+    fn set_status(
+        &mut self,
+        status: Option<crate::Status>
+    ) -> Result<(), crate::Error> {
+        self.status = status;
+        self.draw_status()?;
+        self.refresh();
+        Ok(())
+    }
+
+    // Shows `msg` in the status line, or flashes the error color if the
+    // status line is hidden.
+    fn report_error(&mut self, msg: String) -> Result<(), crate::Error> {
+        if self.status_layout().is_some() {
+            self.set_status(Some(crate::Status::Error(msg)))
+        } else {
+            self.flash_error()
+        }
+    }
+
     fn goto_next_mode(&mut self) {
         self.mode = self.next_allowed_mode(self.mode);
     }
@@ -190,6 +210,14 @@ impl crate::LoginManager<'_> {
                 }
             };
 
+            // any key dismisses the previous message
+            if self.status.is_some() {
+                if let Err(e) = self.set_status(None) {
+                    error!("Fatal: unable to draw status: {e}");
+                    return;
+                }
+            }
+
             if let Some(i) = self.power_armed {
                 // Enter confirms, another action's key re-arms, anything
                 // else cancels and is swallowed.
@@ -199,7 +227,11 @@ impl crate::LoginManager<'_> {
                         let action = self.power_items[i].action.clone();
                         if let Err(e) = action.run() {
                             warn!("Power action failed: {e}");
-                            if let Err(e) = self.flash_error() {
+                            let msg = format!(
+                                "{} failed",
+                                self.power_items[i].action.label
+                            );
+                            if let Err(e) = self.report_error(msg) {
                                 error!("Fatal: unable to draw background: {e}");
                                 return;
                             }
@@ -279,6 +311,13 @@ impl crate::LoginManager<'_> {
                                     .clone()
                                     .unwrap_or_else(|| username.clone())
                             };
+                            if let Err(e) = self.set_status(Some(
+                                crate::Status::Info("Logging in…".to_string())
+                            )) {
+                                error!("Fatal: unable to draw status: {e}");
+                                return;
+                            }
+
                             let password_for_login =
                                 std::mem::take(&mut password);
                             let res = self.greetd.login(
@@ -313,7 +352,9 @@ impl crate::LoginManager<'_> {
                                 }
                                 Err(e) => {
                                     warn!("Login failed: {e}");
-                                    if let Err(e) = self.flash_error() {
+                                    if let Err(e) = self
+                                        .report_error("Login failed".to_string())
+                                    {
                                         error!("Fatal: unable to draw background: {e}");
                                         return;
                                     }
