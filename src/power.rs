@@ -80,7 +80,7 @@ impl Action {
             ("", "") => format!("[F{key}]"),
             (icon, "") => format!("[F{key}] {icon}"),
             ("", label) => format!("[F{key}] {label}"),
-            (icon, label) => format!("[F{key}] {icon}  {label}")
+            (icon, label) => format!("[F{key}] {icon} {label}")
         }
     }
 
@@ -228,7 +228,7 @@ mod tests {
     fn text_with_icon() {
         let mut e = entry("reboot", "F2");
         e.icon = "R".to_string();
-        assert_eq!(resolve(&[e.clone()])[0].text(), "[F2] R  Reboot");
+        assert_eq!(resolve(&[e.clone()])[0].text(), "[F2] R Reboot");
         e.label = Some(String::new());
         assert_eq!(resolve(&[e])[0].text(), "[F2] R");
     }
