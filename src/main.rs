@@ -46,6 +46,12 @@ enum Error {
     Io(#[from] std::io::Error)
 }
 
+#[derive(Clone, Debug)]
+enum Status {
+    Info(String),
+    Error(String)
+}
+
 struct Target {
     name: String,
     exec: Vec<String>
@@ -112,6 +118,15 @@ struct LoginManager<'a> {
     power_offset_y_px: u32,
     // index into power_items of the action awaiting confirmation
     power_armed: Option<usize>,
+    power_hint_font: draw::Font,
+    power_hint_size: (u32, u32),
+    power_hint_offset_y_px: u32,
+
+    // None when [status] show = false
+    status_font: Option<draw::Font>,
+    status_h: u32,
+    status_offset_y_px: u32,
+    status: Option<Status>,
 
     forced_username: Option<String>,
     lock_target: bool,
@@ -151,6 +166,7 @@ impl<'a> LoginManager<'a> {
         login: &settings::Login,
         header: &settings::Header,
         power: &settings::Power,
+        status: &settings::Status,
         ui: &settings::Ui
     ) -> Self {
         let forced_username = login
@@ -231,6 +247,32 @@ impl<'a> LoginManager<'a> {
             .unwrap_or(0)
             + pad_y * 2;
 
+        let power_hint_font = draw::Font::new(
+            power.font.as_deref().unwrap_or(&fonts.main),
+            power.hint_size_px.unwrap_or(power.size_px * 0.7)
+        );
+        let power_hint_size =
+            power_hint_font.measure(power::HINT).unwrap_or_else(|e| {
+                warn!("Unable to measure power hint; not drawing it: {e}");
+                (0, 0)
+            });
+
+        let (status_font, status_h) = if status.show {
+            let font = draw::Font::new(
+                status.font.as_deref().unwrap_or(&fonts.main),
+                status.size_px
+            );
+            match font.measure("Ag") {
+                Ok((_, h)) => (Some(font), h),
+                Err(e) => {
+                    warn!("Unable to measure status font; not drawing it: {e}");
+                    (None, 0)
+                }
+            }
+        } else {
+            (None, 0)
+        };
+
         let lm = Self {
             buf: &mut fb.frame,
             device: &fb.device,
@@ -244,6 +286,13 @@ impl<'a> LoginManager<'a> {
             power_gap_px: power.gap_px,
             power_offset_y_px: power.offset_y_px,
             power_armed: None,
+            power_hint_font,
+            power_hint_size,
+            power_hint_offset_y_px: power.hint_offset_y_px,
+            status_font,
+            status_h,
+            status_offset_y_px: status.offset_y_px,
+            status: None,
             forced_username,
             lock_target,
             hide_target: ui.hide_target,
@@ -270,6 +319,13 @@ impl<'a> LoginManager<'a> {
 
         if !lm.power_items.is_empty() && lm.power_row_layout().is_none() {
             warn!("Power row does not fit on screen; not drawing it");
+        }
+        if let (Some((status_y, status_h)), Some(row)) =
+            (lm.status_layout(), lm.power_row_layout())
+        {
+            if status_y + status_h > row.y {
+                warn!("Status line overlaps the power row; raise power.offset_y_px");
+            }
         }
 
         lm
@@ -403,6 +459,7 @@ fn main() {
         &settings.login,
         &settings.header,
         &settings.power,
+        &settings.status,
         &settings.ui,
     );
 

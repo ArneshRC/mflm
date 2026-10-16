@@ -71,7 +71,8 @@ text = "Welcome to {hostname}"
 
 An optional row of power actions can be shown below the form. Each action is
 bound to an F-key (F1-F12), shown as e.g. `[F1] Shutdown`. Pressing it
-highlights the action; press Enter to confirm or any other key to cancel. Actions appear in the order they are
+highlights the action and shows an `[Enter] Accept` / `[Esc] Cancel` hint under
+it; press Enter to confirm or any other key to cancel. Actions appear in the order they are
 listed, and with none listed there is no row.
 
 ```toml
@@ -82,7 +83,9 @@ confirm = "#aaccee"       # highlight of an action awaiting confirmation; defaul
 font = "JetBrainsMono Nerd Font Mono"   # defaults to fonts.main
 size_px = 18
 gap_px = 32               # between actions
-offset_y_px = 48          # between the form and the row
+offset_y_px = 240         # between the form and the row
+hint_size_px = 13         # confirmation hint; defaults to 70% of size_px
+hint_offset_y_px = 8      # between the row and the hint
 
 [[power.action]]
 kind = "shutdown"         # shutdown | reboot | suspend | hibernate
@@ -98,6 +101,20 @@ command = ["loginctl", "reboot"]   # optional, defaults to `systemctl <verb>`
 
 Commands run directly (no shell) as the greeter user, so that user must be
 allowed to power off, e.g. via polkit or logind.
+
+## Status line
+
+A line below the form shows what is happening: `Logging in…`, `Login failed`,
+or e.g. `Shutdown failed` if a power action fails. Errors are drawn in
+`colors.error` and cleared by the next key press.
+
+```toml
+[status]
+show = true               # false flashes the form in the error color instead
+font = "Sans"             # defaults to fonts.main
+size_px = 18
+offset_y_px = 24          # between the form and the line
+```
 
 # Future plans:
 * Add modules on the headline (datetime etc.)

@@ -125,6 +125,11 @@ pub struct Power {
     pub gap_px: u32,
     /// Gap between the bottom of the form and the row.
     pub offset_y_px: u32,
+    /// Size of the "[Enter] Accept / [Esc] Cancel" hint under an armed
+    /// action. Defaults to 70% of `size_px`.
+    pub hint_size_px: Option<f32>,
+    /// Gap between the row and the hint.
+    pub hint_offset_y_px: u32,
     /// Actions in on-screen order. Empty means no power row.
     pub action: Vec<PowerAction>
 }
@@ -135,8 +140,34 @@ impl Default for Power {
             font: None,
             size_px: 18.0,
             gap_px: 32,
-            offset_y_px: 48,
+            offset_y_px: 240,
+            hint_size_px: None,
+            hint_offset_y_px: 8,
             action: Vec::new()
+        }
+    }
+}
+
+/// Line below the form showing "Logging in…", "Login failed" and similar.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Status {
+    /// When false, errors flash the form in the error color instead.
+    pub show: bool,
+    /// Pango font description. Defaults to `fonts.main`.
+    pub font: Option<String>,
+    pub size_px: f32,
+    /// Gap between the bottom of the form and the line.
+    pub offset_y_px: u32
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self {
+            show: true,
+            font: None,
+            size_px: 18.0,
+            offset_y_px: 24
         }
     }
 }
@@ -197,6 +228,7 @@ pub struct Settings {
     pub login: Login,
     pub header: Header,
     pub power: Power,
+    pub status: Status,
     pub ui: Ui
 }
 
