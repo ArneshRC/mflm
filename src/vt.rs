@@ -28,6 +28,10 @@ const VT_ACKACQ: libc::c_int = 2;
 
 const TTY_FD: RawFd = 0;
 
+// How long to wait for the rest of an escape sequence before treating a lone
+// ESC byte as the Esc key.
+const ESC_TIMEOUT_MS: i32 = 25;
+
 #[repr(C)]
 struct VtMode {
     mode: libc::c_char,
@@ -66,8 +70,85 @@ fn set_vt_mode(mode: libc::c_char) -> nix::Result<()> {
     Errno::result(res).map(drop)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Key {
+    Char(char),
+    // Ctrl+letter, as the lowercase letter
+    Ctrl(char),
+    Enter,
+    Tab,
+    Backspace,
+    Esc,
+    Up,
+    Down,
+    Left,
+    Right,
+    F(u8),
+    Unknown
+}
+
+// Decodes one key starting at `first`. `next` yields the following bytes of
+// an escape sequence, or None if none arrive in time.
+fn decode(first: u8, mut next: impl FnMut() -> Option<u8>) -> Key {
+    match first {
+        b'\r' => Key::Enter,
+        b'\t' => Key::Tab,
+        0x7F => Key::Backspace,
+        0x1B => match next() {
+            None => Key::Esc,
+            Some(b'[') => decode_csi(next),
+            // xterm-style F1-F4
+            Some(b'O') => match next() {
+                Some(b @ b'P'..=b'S') => Key::F(b - b'P' + 1),
+                _ => Key::Unknown
+            },
+            // Alt+key
+            Some(_) => Key::Unknown
+        },
+        0x01..=0x1A => Key::Ctrl((first + 0x60) as char),
+        0x00..=0x1F => Key::Unknown,
+        b => Key::Char(b as char)
+    }
+}
+
+fn decode_csi(mut next: impl FnMut() -> Option<u8>) -> Key {
+    let mut num: Option<u32> = None;
+    loop {
+        match next() {
+            // Linux console F1-F5: ESC [ [ A..E
+            Some(b'[') if num.is_none() => {
+                return match next() {
+                    Some(b @ b'A'..=b'E') => Key::F(b - b'A' + 1),
+                    _ => Key::Unknown
+                };
+            }
+            Some(b @ b'0'..=b'9') => {
+                let d = (b - b'0') as u32;
+                num = Some(num.unwrap_or(0).saturating_mul(10).saturating_add(d));
+            }
+            // modifier parameters, ignored
+            Some(b';') => {}
+            Some(b'A') => return Key::Up,
+            Some(b'B') => return Key::Down,
+            Some(b'C') => return Key::Right,
+            Some(b'D') => return Key::Left,
+            Some(b'~') => {
+                return match num {
+                    Some(n @ 11..=15) => Key::F((n - 10) as u8),
+                    Some(n @ 17..=21) => Key::F((n - 11) as u8),
+                    Some(n @ 23..=24) => Key::F((n - 12) as u8),
+                    _ => Key::Unknown
+                };
+            }
+            // any other final byte ends an unrecognized sequence
+            Some(0x40..=0x7E) | None => return Key::Unknown,
+            Some(_) => {}
+        }
+    }
+}
+
 pub enum Event {
-    Byte(u8),
+    Key(Key),
     // we got the VT back and must repaint everything
     Redraw,
     Eof
@@ -127,22 +208,48 @@ impl Tty {
     }
 
     // next input byte, ignoring redraw requests (they stay queued in the pipe)
-    pub fn next_byte(&mut self) -> Option<u8> {
+    fn next_byte(&mut self) -> Option<u8> {
         if self.pending.is_empty() && !self.fill() {
             return None;
         }
         self.pending.pop_front()
     }
 
+    // like next_byte, but gives up if nothing arrives within timeout_ms
+    fn next_byte_timeout(&mut self, timeout_ms: i32) -> Option<u8> {
+        if self.pending.is_empty() {
+            let mut fds = [PollFd::new(TTY_FD, PollFlags::POLLIN)];
+            loop {
+                match poll(&mut fds, timeout_ms) {
+                    Ok(0) => return None,
+                    Ok(_) => break,
+                    Err(Errno::EINTR) => continue,
+                    Err(_) => return None
+                }
+            }
+            if !self.fill() {
+                return None;
+            }
+        }
+        self.pending.pop_front()
+    }
+
+    fn next_key(&mut self) -> Event {
+        match self.next_byte() {
+            Some(b) => Event::Key(decode(b, || {
+                self.next_byte_timeout(ESC_TIMEOUT_MS)
+            })),
+            None => Event::Eof
+        }
+    }
+
     pub fn next_event(&mut self) -> Event {
-        if let Some(b) = self.pending.pop_front() {
-            return Event::Byte(b);
+        if !self.pending.is_empty() {
+            return self.next_key();
         }
         let wake_rd = match self.wake_rd {
             Some(fd) => fd,
-            None => {
-                return self.next_byte().map_or(Event::Eof, Event::Byte)
-            }
+            None => return self.next_key()
         };
 
         let mut fds = [
@@ -173,7 +280,7 @@ impl Tty {
             return Event::Redraw;
         }
         if ready(&fds[0]) {
-            return self.next_byte().map_or(Event::Eof, Event::Byte);
+            return self.next_key();
         }
         Event::Redraw
     }
@@ -189,5 +296,64 @@ impl Drop for Tty {
             let _ = unistd::close(wr);
             let _ = unistd::close(rd);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(bytes: &[u8]) -> Key {
+        let mut rest = bytes[1..].iter().copied();
+        decode(bytes[0], || rest.next())
+    }
+
+    #[test]
+    fn plain_keys() {
+        assert_eq!(key(b"a"), Key::Char('a'));
+        assert_eq!(key(b"\r"), Key::Enter);
+        assert_eq!(key(b"\t"), Key::Tab);
+        assert_eq!(key(b"\x7f"), Key::Backspace);
+        assert_eq!(key(b"\x15"), Key::Ctrl('u'));
+        assert_eq!(key(b"\x03"), Key::Ctrl('c'));
+    }
+
+    #[test]
+    fn lone_esc() {
+        assert_eq!(key(b"\x1b"), Key::Esc);
+    }
+
+    #[test]
+    fn arrows() {
+        assert_eq!(key(b"\x1b[A"), Key::Up);
+        assert_eq!(key(b"\x1b[B"), Key::Down);
+        assert_eq!(key(b"\x1b[C"), Key::Right);
+        assert_eq!(key(b"\x1b[D"), Key::Left);
+        assert_eq!(key(b"\x1b[1;5C"), Key::Right);
+    }
+
+    #[test]
+    fn linux_console_fkeys() {
+        assert_eq!(key(b"\x1b[[A"), Key::F(1));
+        assert_eq!(key(b"\x1b[[E"), Key::F(5));
+        assert_eq!(key(b"\x1b[17~"), Key::F(6));
+        assert_eq!(key(b"\x1b[21~"), Key::F(10));
+        assert_eq!(key(b"\x1b[23~"), Key::F(11));
+        assert_eq!(key(b"\x1b[24~"), Key::F(12));
+    }
+
+    #[test]
+    fn xterm_fkeys() {
+        assert_eq!(key(b"\x1bOP"), Key::F(1));
+        assert_eq!(key(b"\x1bOS"), Key::F(4));
+        assert_eq!(key(b"\x1b[15~"), Key::F(5));
+    }
+
+    #[test]
+    fn unknown_sequences() {
+        assert_eq!(key(b"\x1b[3~"), Key::Unknown);
+        assert_eq!(key(b"\x1b[H"), Key::Unknown);
+        assert_eq!(key(b"\x1bx"), Key::Unknown);
+        assert_eq!(key(b"\x1b["), Key::Unknown);
     }
 }

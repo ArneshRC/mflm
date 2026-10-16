@@ -1,5 +1,7 @@
 use log::{error, info, warn};
 
+use crate::vt::Key;
+
 impl crate::LoginManager<'_> {
     fn mode_allowed(&self, mode: crate::Mode) -> bool {
         match mode {
@@ -156,8 +158,8 @@ impl crate::LoginManager<'_> {
                 self.refresh();
             }
 
-            let b = match tty.next_event() {
-                crate::vt::Event::Byte(b) => b,
+            let key = match tty.next_event() {
+                crate::vt::Event::Key(key) => key,
                 crate::vt::Event::Redraw => {
                     needs_redraw = true;
                     continue;
@@ -168,17 +170,15 @@ impl crate::LoginManager<'_> {
                 }
             };
 
-            match b as char {
-                '\x15' | '\x0B' => match self.mode {
-                    // ctrl-k/ctrl-u
+            match key {
+                Key::Ctrl('u') | Key::Ctrl('k') => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
                         username.clear();
                     }
                     crate::Mode::EditingPassword => password.clear()
                 },
-                '\x03' | '\x04' => {
-                    // ctrl-c/ctrl-D
+                Key::Ctrl('c') | Key::Ctrl('d') => {
                     username.clear();
                     password.clear();
                     if let Err(e) = self.greetd.cancel() {
@@ -186,8 +186,7 @@ impl crate::LoginManager<'_> {
                     }
                     return;
                 }
-                '\x7F' => match self.mode {
-                    // backspace
+                Key::Backspace => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
                         username.pop();
@@ -196,8 +195,9 @@ impl crate::LoginManager<'_> {
                         password.pop();
                     }
                 },
-                '\t' => self.goto_next_mode(),
-                '\r' => match self.mode {
+                Key::Tab | Key::Down => self.goto_next_mode(),
+                Key::Up => self.goto_prev_mode(),
+                Key::Enter => match self.mode {
                     crate::Mode::SelectingSession => {
                         self.mode = if self.show_username_row() {
                             crate::Mode::EditingUsername
@@ -279,30 +279,32 @@ impl crate::LoginManager<'_> {
                         }
                     }
                 },
-                // this is terrible
-                '\x1b' => if let Some(b'[') = tty.next_byte() { match tty.next_byte() {
-                    Some(b'A') => self.goto_prev_mode(),
-                    Some(b'B') => self.goto_next_mode(),
-                    Some(b'C') => if self.mode == crate::Mode::SelectingSession && self.show_target_row() {
-                        self.target_index = (self.target_index + 1)
-                            % self.targets.len()
-                    },
-                    Some(b'D') => if self.mode == crate::Mode::SelectingSession && self.show_target_row() {
-                            if self.target_index == 0 {
-                                self.target_index = self.targets.len();
-                            }
-                            self.target_index -= 1;
+                Key::Right => {
+                    if self.mode == crate::Mode::SelectingSession
+                        && self.show_target_row()
+                    {
+                        self.target_index =
+                            (self.target_index + 1) % self.targets.len()
+                    }
+                }
+                Key::Left => {
+                    if self.mode == crate::Mode::SelectingSession
+                        && self.show_target_row()
+                    {
+                        if self.target_index == 0 {
+                            self.target_index = self.targets.len();
                         }
-                    ,
-                    _ => () // shrug
-                } },
-                v => match self.mode {
+                        self.target_index -= 1;
+                    }
+                }
+                Key::Char(v) => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
                         username.push(v)
                     }
                     crate::Mode::EditingPassword => password.push(v)
-                }
+                },
+                _ => ()
             }
             self.refresh();
         }
