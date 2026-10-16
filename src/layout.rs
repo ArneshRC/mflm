@@ -15,7 +15,9 @@ pub(crate) struct PowerRowLayout {
     pub(crate) y: u32,
     pub(crate) h: u32,
     /// Left edge of each item, in `power_items` order.
-    pub(crate) xs: Vec<u32>
+    pub(crate) xs: Vec<u32>,
+    /// Top of the confirmation hint, or None if it does not fit.
+    pub(crate) hint_y: Option<u32>
 }
 
 impl crate::LoginManager<'_> {
@@ -58,7 +60,15 @@ impl crate::LoginManager<'_> {
             })
             .collect();
 
-        Some(PowerRowLayout { y, h, xs })
+        let hint_y = (y + h)
+            .checked_add(self.power_hint_offset_y_px)
+            .filter(|hint_y| {
+                self.power_hint_size.1 > 0
+                    && hint_y.checked_add(self.power_hint_size.1)
+                        .is_some_and(|bottom| bottom <= self.screen_size.1)
+            });
+
+        Some(PowerRowLayout { y, h, xs, hint_y })
     }
 
     /// Top and height of the status line below the form, or None if it is

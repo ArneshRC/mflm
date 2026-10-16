@@ -279,7 +279,7 @@ impl crate::LoginManager<'_> {
         };
 
         let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
-        for (i, (item, x)) in self.power_items.iter().zip(layout.xs).enumerate()
+        for (i, (item, x)) in self.power_items.iter().zip(layout.xs.iter().copied()).enumerate()
         {
             let (bg, fg) = if self.power_armed == Some(i) {
                 (self.colors.confirm, self.colors.background)
@@ -299,6 +299,29 @@ impl crate::LoginManager<'_> {
             ))?;
             self.power_font
                 .auto_draw_text_centered(&mut text, &bg, &fg, &item.text)?;
+        }
+
+        if let Some(hint_y) = layout.hint_y {
+            let bg = self.colors.background;
+            let (hint_w, hint_h) = self.power_hint_size;
+            buf.subdimensions((0, hint_y, self.screen_size.0, hint_h))?
+                .memset(&bg);
+
+            if let Some(i) = self.power_armed {
+                // centered under the armed action, kept on screen
+                let hint_w = hint_w.min(self.screen_size.0);
+                let center = layout.xs[i] + self.power_items[i].w / 2;
+                let x = center
+                    .saturating_sub(hint_w / 2)
+                    .min(self.screen_size.0 - hint_w);
+                let fg = self.colors.neutral;
+                self.power_hint_font.auto_draw_text_centered(
+                    &mut buf.subdimensions((x, hint_y, hint_w, hint_h))?,
+                    &bg,
+                    &fg,
+                    crate::power::HINT
+                )?;
+            }
         }
 
         self.should_refresh = true;

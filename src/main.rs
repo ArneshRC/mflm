@@ -118,6 +118,9 @@ struct LoginManager<'a> {
     power_offset_y_px: u32,
     // index into power_items of the action awaiting confirmation
     power_armed: Option<usize>,
+    power_hint_font: draw::Font,
+    power_hint_size: (u32, u32),
+    power_hint_offset_y_px: u32,
 
     // None when [status] show = false
     status_font: Option<draw::Font>,
@@ -244,6 +247,16 @@ impl<'a> LoginManager<'a> {
             .unwrap_or(0)
             + pad_y * 2;
 
+        let power_hint_font = draw::Font::new(
+            power.font.as_deref().unwrap_or(&fonts.main),
+            power.hint_size_px.unwrap_or(power.size_px * 0.7)
+        );
+        let power_hint_size =
+            power_hint_font.measure(power::HINT).unwrap_or_else(|e| {
+                warn!("Unable to measure power hint; not drawing it: {e}");
+                (0, 0)
+            });
+
         let (status_font, status_h) = if status.show {
             let font = draw::Font::new(
                 status.font.as_deref().unwrap_or(&fonts.main),
@@ -273,6 +286,9 @@ impl<'a> LoginManager<'a> {
             power_gap_px: power.gap_px,
             power_offset_y_px: power.offset_y_px,
             power_armed: None,
+            power_hint_font,
+            power_hint_size,
+            power_hint_offset_y_px: power.hint_offset_y_px,
             status_font,
             status_h,
             status_offset_y_px: status.offset_y_px,

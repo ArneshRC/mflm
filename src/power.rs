@@ -47,6 +47,9 @@ impl Kind {
     }
 }
 
+/// Shown under an action awaiting confirmation.
+pub const HINT: &str = "[Enter] Accept\n[Esc] Cancel";
+
 #[derive(Error, Debug)]
 pub enum PowerError {
     #[error("failed to run {command:?}: {source}")]

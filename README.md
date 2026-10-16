@@ -71,7 +71,8 @@ text = "Welcome to {hostname}"
 
 An optional row of power actions can be shown below the form. Each action is
 bound to an F-key (F1-F12), shown as e.g. `[F1] Shutdown`. Pressing it
-highlights the action; press Enter to confirm or any other key to cancel. Actions appear in the order they are
+highlights the action and shows an `[Enter] Accept` / `[Esc] Cancel` hint under
+it; press Enter to confirm or any other key to cancel. Actions appear in the order they are
 listed, and with none listed there is no row.
 
 ```toml
@@ -83,6 +84,8 @@ font = "JetBrainsMono Nerd Font Mono"   # defaults to fonts.main
 size_px = 18
 gap_px = 32               # between actions
 offset_y_px = 48          # between the form and the row
+hint_size_px = 13         # confirmation hint; defaults to 70% of size_px
+hint_offset_y_px = 8      # between the row and the hint
 
 [[power.action]]
 kind = "shutdown"         # shutdown | reboot | suspend | hibernate
