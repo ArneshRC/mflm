@@ -1,5 +1,9 @@
 use log::{error, info, warn};
 
+use crate::vt::Key;
+
+const ERROR_FLASH: std::time::Duration = std::time::Duration::from_millis(500);
+
 impl crate::LoginManager<'_> {
     fn mode_allowed(&self, mode: crate::Mode) -> bool {
         match mode {
@@ -39,6 +43,16 @@ impl crate::LoginManager<'_> {
         from
     }
 
+    // Shows the error color long enough to be seen before the caller
+    // repaints. Keys typed meanwhile stay buffered in the tty.
+    fn flash_error(&mut self) -> Result<(), crate::Error> {
+        let bg = self.colors.error;
+        self.draw_bg(&bg)?;
+        self.refresh();
+        std::thread::sleep(ERROR_FLASH);
+        Ok(())
+    }
+
     fn goto_next_mode(&mut self) {
         self.mode = self.next_allowed_mode(self.mode);
     }
@@ -57,6 +71,7 @@ impl crate::LoginManager<'_> {
         let mut last_password_len = password.len();
         let mut last_target_index = self.target_index;
         let mut last_mode = self.mode;
+        let mut last_power_armed = self.power_armed;
         let mut needs_redraw = false;
 
         let mut tty = crate::vt::Tty::new();
@@ -103,6 +118,13 @@ impl crate::LoginManager<'_> {
                     return;
                 }
                 last_target_index = self.target_index;
+            }
+            if last_power_armed != self.power_armed {
+                if let Err(e) = self.draw_power_row() {
+                    error!("Fatal: unable to draw power actions: {e}");
+                    return;
+                }
+                last_power_armed = self.power_armed;
             }
             if last_mode != self.mode {
                 let bg = self.colors.neutral;
@@ -156,8 +178,8 @@ impl crate::LoginManager<'_> {
                 self.refresh();
             }
 
-            let b = match tty.next_event() {
-                crate::vt::Event::Byte(b) => b,
+            let key = match tty.next_event() {
+                crate::vt::Event::Key(key) => key,
                 crate::vt::Event::Redraw => {
                     needs_redraw = true;
                     continue;
@@ -168,17 +190,44 @@ impl crate::LoginManager<'_> {
                 }
             };
 
-            match b as char {
-                '\x15' | '\x0B' => match self.mode {
-                    // ctrl-k/ctrl-u
+            if let Some(i) = self.power_armed {
+                // Enter confirms, another action's key re-arms, anything
+                // else cancels and is swallowed.
+                match key {
+                    Key::Enter => {
+                        self.power_armed = None;
+                        let action = self.power_items[i].action.clone();
+                        if let Err(e) = action.run() {
+                            warn!("Power action failed: {e}");
+                            if let Err(e) = self.flash_error() {
+                                error!("Fatal: unable to draw background: {e}");
+                                return;
+                            }
+                        }
+                        // also repaints after resuming from suspend/hibernate
+                        needs_redraw = true;
+                    }
+                    Key::F(n) => self.power_armed = self.power_action_for_key(n),
+                    _ => self.power_armed = None
+                }
+                self.refresh();
+                continue;
+            }
+
+            match key {
+                Key::F(n) => {
+                    if let Some(i) = self.power_action_for_key(n) {
+                        self.power_armed = Some(i);
+                    }
+                }
+                Key::Ctrl('u') | Key::Ctrl('k') => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
                         username.clear();
                     }
                     crate::Mode::EditingPassword => password.clear()
                 },
-                '\x03' | '\x04' => {
-                    // ctrl-c/ctrl-D
+                Key::Ctrl('c') | Key::Ctrl('d') => {
                     username.clear();
                     password.clear();
                     if let Err(e) = self.greetd.cancel() {
@@ -186,8 +235,7 @@ impl crate::LoginManager<'_> {
                     }
                     return;
                 }
-                '\x7F' => match self.mode {
-                    // backspace
+                Key::Backspace => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
                         username.pop();
@@ -196,8 +244,9 @@ impl crate::LoginManager<'_> {
                         password.pop();
                     }
                 },
-                '\t' => self.goto_next_mode(),
-                '\r' => match self.mode {
+                Key::Tab | Key::Down => self.goto_next_mode(),
+                Key::Up => self.goto_prev_mode(),
+                Key::Enter => match self.mode {
                     crate::Mode::SelectingSession => {
                         self.mode = if self.show_username_row() {
                             crate::Mode::EditingUsername
@@ -264,8 +313,7 @@ impl crate::LoginManager<'_> {
                                 }
                                 Err(e) => {
                                     warn!("Login failed: {e}");
-                                    let bg = self.colors.error;
-                                    if let Err(e) = self.draw_bg(&bg) {
+                                    if let Err(e) = self.flash_error() {
                                         error!("Fatal: unable to draw background: {e}");
                                         return;
                                     }
@@ -279,30 +327,32 @@ impl crate::LoginManager<'_> {
                         }
                     }
                 },
-                // this is terrible
-                '\x1b' => if let Some(b'[') = tty.next_byte() { match tty.next_byte() {
-                    Some(b'A') => self.goto_prev_mode(),
-                    Some(b'B') => self.goto_next_mode(),
-                    Some(b'C') => if self.mode == crate::Mode::SelectingSession && self.show_target_row() {
-                        self.target_index = (self.target_index + 1)
-                            % self.targets.len()
-                    },
-                    Some(b'D') => if self.mode == crate::Mode::SelectingSession && self.show_target_row() {
-                            if self.target_index == 0 {
-                                self.target_index = self.targets.len();
-                            }
-                            self.target_index -= 1;
+                Key::Right => {
+                    if self.mode == crate::Mode::SelectingSession
+                        && self.show_target_row()
+                    {
+                        self.target_index =
+                            (self.target_index + 1) % self.targets.len()
+                    }
+                }
+                Key::Left => {
+                    if self.mode == crate::Mode::SelectingSession
+                        && self.show_target_row()
+                    {
+                        if self.target_index == 0 {
+                            self.target_index = self.targets.len();
                         }
-                    ,
-                    _ => () // shrug
-                } },
-                v => match self.mode {
+                        self.target_index -= 1;
+                    }
+                }
+                Key::Char(v) => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
                         username.push(v)
                     }
                     crate::Mode::EditingPassword => password.push(v)
-                }
+                },
+                _ => ()
             }
             self.refresh();
         }

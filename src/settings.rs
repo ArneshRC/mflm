@@ -3,6 +3,7 @@ use serde::Deserialize;
 use crate::color::{Color, ParseColorError};
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Fonts {
     /// Pango font description string for the main UI font (used for session/user/pass rows).
     /// Example: "DejaVu Sans Mono" or "Sans".
@@ -13,15 +14,25 @@ pub struct Fonts {
     pub heading: String,
 
     /// Font size for main UI text (pixels).
-    #[serde(default = "default_main_font_size_px")]
     pub main_size_px: f32,
 
     /// Font size for heading UI text (pixels).
-    #[serde(default = "default_heading_font_size_px")]
     pub heading_size_px: f32
 }
 
+impl Default for Fonts {
+    fn default() -> Self {
+        Self {
+            main: "Monospace".to_string(),
+            heading: "Sans".to_string(),
+            main_size_px: 42.0,
+            heading_size_px: 72.0
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Colors {
     /// Hex: "#RRGGBB" or "#AARRGGBB".
     pub foreground: String,
@@ -32,7 +43,10 @@ pub struct Colors {
     /// Used for selections / active fields / in-progress actions.
     pub selected: String,
     /// Used for errors (e.g. auth failure).
-    pub error: String
+    pub error: String,
+    /// Background of a power action awaiting confirmation. Defaults to
+    /// `selected`.
+    pub confirm: Option<String>
 }
 
 impl Default for Colors {
@@ -42,7 +56,8 @@ impl Default for Colors {
             background: "#000000".to_string(),
             neutral: "#cccccc".to_string(),
             selected: "#aaccee".to_string(),
-            error: "#ecbcad".to_string()
+            error: "#ecbcad".to_string(),
+            confirm: None
         }
     }
 }
@@ -53,29 +68,12 @@ pub struct ResolvedColors {
     pub background: Color,
     pub neutral: Color,
     pub selected: Color,
-    pub error: Color
-}
-
-impl Default for Fonts {
-    fn default() -> Self {
-        Self {
-            main: "Monospace".to_string(),
-            heading: "Sans".to_string(),
-            main_size_px: default_main_font_size_px(),
-            heading_size_px: default_heading_font_size_px()
-        }
-    }
-}
-
-fn default_main_font_size_px() -> f32 {
-    42.0
-}
-
-fn default_heading_font_size_px() -> f32 {
-    72.0
+    pub error: Color,
+    pub confirm: Color
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Login {
     /// Optional session target name to force.
     pub target: Option<String>,
@@ -84,60 +82,63 @@ pub struct Login {
     pub username: Option<String>
 }
 
-fn default_gap_below_session_px() -> u32 {
-    64
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Header {
+    /// Heading text. Supports placeholders: {hostname}. Use {{ and }} for
+    /// literal braces.
+    pub text: String
 }
 
-fn default_gap_below_username_px() -> u32 {
-    32
+impl Default for Header {
+    fn default() -> Self {
+        Self {
+            text: "Welcome to {hostname}".to_string()
+        }
+    }
 }
 
-fn default_blackout_on_success() -> bool {
-    true
+/// One entry of `[[power.action]]`. Fields are loosely typed so a bad entry
+/// is skipped (see `power::resolve`) instead of failing the whole config.
+#[derive(Default, Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct PowerAction {
+    /// "shutdown", "reboot", "suspend" or "hibernate".
+    pub kind: String,
+    /// "F1" through "F12".
+    pub key: String,
+    /// Defaults per kind, e.g. "Shutdown".
+    pub label: Option<String>,
+    /// Usually a Nerd Font glyph. Empty means no icon.
+    pub icon: String,
+    /// argv, run without a shell. Defaults to `systemctl <verb>`.
+    pub command: Option<Vec<String>>
 }
 
-fn default_row_h() -> u32 {
-    72
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Power {
+    /// Pango font description. Defaults to `fonts.main`.
+    pub font: Option<String>,
+    pub size_px: f32,
+    /// Horizontal gap between actions.
+    pub gap_px: u32,
+    /// Gap between the bottom of the form and the row.
+    pub offset_y_px: u32,
+    /// Actions in on-screen order. Empty means no power row.
+    pub action: Vec<PowerAction>
 }
 
-fn default_password_char() -> String {
-    "•".to_string()
-}
-
-fn default_text_align() -> TextAlign {
-    TextAlign::Left
-}
-
-fn default_hide_target() -> bool {
-    false
-}
-
-fn default_hide_username() -> bool {
-    false
-}
-
-fn default_form_width() -> u32 {
-    512
-}
-
-fn default_form_height() -> u32 {
-    168
-}
-
-fn default_input_margin_px() -> u32 {
-    15
-}
-
-fn default_heading_offset_y_px() -> u32 {
-    24
-}
-
-fn default_session_left_arrow() -> String {
-    "❮".to_string()
-}
-
-fn default_session_right_arrow() -> String {
-    "❯".to_string()
+impl Default for Power {
+    fn default() -> Self {
+        Self {
+            font: None,
+            size_px: 18.0,
+            gap_px: 32,
+            offset_y_px: 48,
+            action: Vec::new()
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -149,132 +150,84 @@ pub enum TextAlign {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Ui {
-    #[serde(default = "default_hide_target")]
     pub hide_target: bool,
-
-    #[serde(default = "default_hide_username")]
     pub hide_username: bool,
-
-    #[serde(default = "default_gap_below_session_px")]
     pub gap_below_session_px: u32,
-
-    #[serde(default = "default_gap_below_username_px")]
     pub gap_below_username_px: u32,
-
-    #[serde(default = "default_row_h")]
     pub row_h: u32,
-
-    #[serde(default = "default_password_char")]
     pub password_char: String,
-
-    #[serde(default = "default_text_align")]
     pub text_align: TextAlign,
-
-    #[serde(default = "default_input_margin_px")]
     pub input_margin_px: u32,
-
-    #[serde(default = "default_heading_offset_y_px")]
     pub heading_offset_y_px: u32,
-
-    #[serde(default = "default_blackout_on_success")]
     pub blackout_on_success: bool,
-
-    #[serde(default = "default_form_width")]
     pub form_width: u32,
-
-    #[serde(default = "default_form_height")]
     pub form_height: u32,
-
-    #[serde(default = "default_session_left_arrow")]
     pub session_left_arrow: String,
-
-    #[serde(default = "default_session_right_arrow")]
     pub session_right_arrow: String
 }
 
 impl Default for Ui {
     fn default() -> Self {
         Self {
-            hide_target: default_hide_target(),
-            hide_username: default_hide_username(),
-            gap_below_session_px: default_gap_below_session_px(),
-            gap_below_username_px: default_gap_below_username_px(),
-            row_h: default_row_h(),
-            password_char: default_password_char(),
-            text_align: default_text_align(),
-            input_margin_px: default_input_margin_px(),
-            heading_offset_y_px: default_heading_offset_y_px(),
-            blackout_on_success: default_blackout_on_success(),
-            form_width: default_form_width(),
-            form_height: default_form_height(),
-            session_left_arrow: default_session_left_arrow(),
-            session_right_arrow: default_session_right_arrow()
+            hide_target: false,
+            hide_username: false,
+            gap_below_session_px: 64,
+            gap_below_username_px: 32,
+            row_h: 72,
+            password_char: "•".to_string(),
+            text_align: TextAlign::Center,
+            input_margin_px: 15,
+            heading_offset_y_px: 24,
+            blackout_on_success: true,
+            form_width: 512,
+            form_height: 168,
+            session_left_arrow: "❮".to_string(),
+            session_right_arrow: "❯".to_string()
         }
     }
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Settings {
-    #[serde(default)]
     pub fonts: Fonts,
-
-    #[serde(default)]
     pub colors: Colors,
-
-    #[serde(default)]
     pub login: Login,
-
-    #[serde(default)]
+    pub header: Header,
+    pub power: Power,
     pub ui: Ui
 }
 
 impl Settings {
-    /// Loads configuration from /etc/mflm/config.toml
+    /// Loads configuration from /etc/mflm/config.toml. Missing keys fall back
+    /// to the `Default` impls above.
     pub fn load() -> Result<Self, config::ConfigError> {
-        let builder = config::Config::builder()
-            .set_default("fonts.main", Fonts::default().main)?
-            .set_default("fonts.heading", Fonts::default().heading)?
-            .set_default("fonts.main_size_px", default_main_font_size_px() as f64)?
-            .set_default("fonts.heading_size_px", default_heading_font_size_px() as f64)?
-            .set_default("colors.foreground", Colors::default().foreground)?
-            .set_default("colors.background", Colors::default().background)?
-            .set_default("colors.neutral", Colors::default().neutral)?
-            .set_default("colors.selected", Colors::default().selected)?
-            .set_default("colors.error", Colors::default().error)?
-            .set_default("ui.hide_target", default_hide_target())?
-            .set_default("ui.hide_username", default_hide_username())?
-            .set_default("ui.gap_below_session_px", default_gap_below_session_px())?
-            .set_default("ui.gap_below_username_px", default_gap_below_username_px())?
-            .set_default("ui.row_h", default_row_h())?
-            .set_default("ui.password_char", default_password_char())?
-            .set_default("ui.text_align", "center")?
-            .set_default("ui.input_margin_px", default_input_margin_px())?
-            .set_default("ui.heading_offset_y_px", default_heading_offset_y_px())?
-            .set_default("ui.form_width", default_form_width())?
-            .set_default("ui.form_height", default_form_height())?
-            .set_default("ui.session_left_arrow", default_session_left_arrow())?
-            .set_default("ui.session_right_arrow", default_session_right_arrow())?
-            .set_default("ui.blackout_on_success", default_blackout_on_success())?
+        config::Config::builder()
             .add_source(
                 config::File::from(std::path::Path::new(
                     "/etc/mflm/config.toml"
                 ))
                 .format(config::FileFormat::Toml)
                 .required(false)
-            );
-
-        let cfg = builder.build()?;
-        cfg.try_deserialize::<Self>()
+            )
+            .build()?
+            .try_deserialize::<Self>()
     }
 
     pub fn resolve_colors(&self) -> Result<ResolvedColors, ParseColorError> {
+        let selected = Color::from_hex(&self.colors.selected)?;
         Ok(ResolvedColors {
             foreground: Color::from_hex(&self.colors.foreground)?,
             background: Color::from_hex(&self.colors.background)?,
             neutral: Color::from_hex(&self.colors.neutral)?,
-            selected: Color::from_hex(&self.colors.selected)?,
-            error: Color::from_hex(&self.colors.error)?
+            selected,
+            error: Color::from_hex(&self.colors.error)?,
+            confirm: match &self.colors.confirm {
+                Some(c) => Color::from_hex(c)?,
+                None => selected
+            }
         })
     }
 }
