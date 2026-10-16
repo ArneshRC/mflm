@@ -140,7 +140,7 @@ impl Default for Power {
             font: None,
             size_px: 18.0,
             gap_px: 32,
-            offset_y_px: 48,
+            offset_y_px: 240,
             hint_size_px: None,
             hint_offset_y_px: 8,
             action: Vec::new()

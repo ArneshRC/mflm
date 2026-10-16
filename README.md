@@ -83,7 +83,7 @@ confirm = "#aaccee"       # highlight of an action awaiting confirmation; defaul
 font = "JetBrainsMono Nerd Font Mono"   # defaults to fonts.main
 size_px = 18
 gap_px = 32               # between actions
-offset_y_px = 48          # between the form and the row
+offset_y_px = 240         # between the form and the row
 hint_size_px = 13         # confirmation hint; defaults to 70% of size_px
 hint_offset_y_px = 8      # between the row and the hint
 
