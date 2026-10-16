@@ -70,8 +70,8 @@ text = "Welcome to {hostname}"
 ## Power actions
 
 An optional row of power actions can be shown below the form. Each action is
-bound to an F-key (F1-F12). Pressing it highlights the action; press Enter to
-confirm or any other key to cancel. Actions appear in the order they are
+bound to an F-key (F1-F12), shown as e.g. `[F1] Shutdown`. Pressing it
+highlights the action; press Enter to confirm or any other key to cancel. Actions appear in the order they are
 listed, and with none listed there is no row.
 
 ```toml

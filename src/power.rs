@@ -75,10 +75,12 @@ pub struct Action {
 
 impl Action {
     pub fn text(&self) -> String {
+        let key = self.key;
         match (self.icon.as_str(), self.label.as_str()) {
-            (icon, "") => icon.to_string(),
-            ("", label) => label.to_string(),
-            (icon, label) => format!("{icon}  {label}")
+            ("", "") => format!("[F{key}]"),
+            (icon, "") => format!("[F{key}] {icon}"),
+            ("", label) => format!("[F{key}] {label}"),
+            (icon, label) => format!("[F{key}] {icon}  {label}")
         }
     }
 
@@ -203,7 +205,7 @@ mod tests {
         assert_eq!(a.kind, Kind::Shutdown);
         assert_eq!(a.label, "Shutdown");
         assert_eq!(a.command, ["systemctl", "poweroff"]);
-        assert_eq!(a.text(), "Shutdown");
+        assert_eq!(a.text(), "[F1] Shutdown");
     }
 
     #[test]
@@ -226,8 +228,8 @@ mod tests {
     fn text_with_icon() {
         let mut e = entry("reboot", "F2");
         e.icon = "R".to_string();
-        assert_eq!(resolve(&[e.clone()])[0].text(), "R  Reboot");
+        assert_eq!(resolve(&[e.clone()])[0].text(), "[F2] R  Reboot");
         e.label = Some(String::new());
-        assert_eq!(resolve(&[e])[0].text(), "R");
+        assert_eq!(resolve(&[e])[0].text(), "[F2] R");
     }
 }
