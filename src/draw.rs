@@ -209,13 +209,13 @@ impl crate::LoginManager<'_> {
             form.memset(&form_fill);
         }
 
-        let hostname = hostname::get()?.to_string_lossy().into_owned();
+        let heading = self.header.render()?;
 
         self.heading_font.auto_draw_text_centered(
             &mut buf.offset((0, self.heading_offset_y_px))?,
             &bg,
             &fg,
-            &format!("Welcome to {hostname}")
+            &heading
         )?;
 
         // Underlines (username/password). Selected field uses selected color.

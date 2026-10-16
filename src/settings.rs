@@ -77,6 +77,22 @@ pub struct Login {
     pub username: Option<String>
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Header {
+    /// Heading text. Supports placeholders: {hostname}. Use {{ and }} for
+    /// literal braces.
+    pub text: String
+}
+
+impl Default for Header {
+    fn default() -> Self {
+        Self {
+            text: "Welcome to {hostname}".to_string()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TextAlign {
@@ -131,6 +147,7 @@ pub struct Settings {
     pub fonts: Fonts,
     pub colors: Colors,
     pub login: Login,
+    pub header: Header,
     pub ui: Ui
 }
 

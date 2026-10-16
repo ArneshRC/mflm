@@ -24,6 +24,7 @@ mod greetd;
 mod greeter_loop;
 mod layout;
 mod settings;
+mod template;
 mod vt;
 
 #[derive(PartialEq, Copy, Clone)]
@@ -101,6 +102,7 @@ struct LoginManager<'a> {
     main_font: draw::Font,
 
     colors: settings::ResolvedColors,
+    header: template::Template,
 
     forced_username: Option<String>,
     lock_target: bool,
@@ -138,6 +140,7 @@ impl<'a> LoginManager<'a> {
         fonts: &settings::Fonts,
         colors: settings::ResolvedColors,
         login: &settings::Login,
+        header: &settings::Header,
         ui: &settings::Ui
     ) -> Self {
         let forced_username = login
@@ -198,6 +201,7 @@ impl<'a> LoginManager<'a> {
             heading_font: draw::Font::new(&fonts.heading, fonts.heading_size_px),
             main_font: draw::Font::new(&fonts.main, fonts.main_size_px),
             colors,
+            header: template::Template::parse(&header.text),
             forced_username,
             lock_target,
             hide_target: ui.hide_target,
@@ -345,6 +349,7 @@ fn main() {
         &settings.fonts,
         colors,
         &settings.login,
+        &settings.header,
         &settings.ui,
     );
 
