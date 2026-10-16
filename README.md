@@ -101,3 +101,6 @@ allowed to power off, e.g. via polkit or logind.
 
 # Future plans:
 * Add modules on the headline (datetime etc.)
+
+# AI Disclosure
+Claude Opus 5.5 was used to assist with planning and implementation.
