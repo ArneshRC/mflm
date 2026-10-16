@@ -256,81 +256,17 @@ fn main() {
     let settings = match settings::Settings::load() {
         Ok(s) => {
             info!("Loaded configuration successfully");
-            debug!(
-                "Configured fonts: heading={:?} ({}px), main={:?} ({}px)",
-                s.fonts.heading,
-                s.fonts.heading_size_px,
-                s.fonts.main,
-                s.fonts.main_size_px
-            );
-            debug!(
-                "Configured login: target={:?} username={:?}",
-                s.login.target,
-                s.login.username
-            );
-            debug!(
-                "Configured ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} input_margin_px={} heading_offset_y_px={} blackout_on_success={} form_width={} form_height={}",
-                s.ui.hide_target,
-                s.ui.hide_username,
-                s.ui.gap_below_session_px,
-                s.ui.gap_below_username_px,
-                s.ui.row_h,
-                s.ui.password_char,
-                s.ui.text_align,
-                s.ui.input_margin_px,
-                s.ui.heading_offset_y_px,
-                s.ui.blackout_on_success,
-                s.ui.form_width,
-                s.ui.form_height
-            );
             s
         }
         Err(e) => {
             warn!("Failed to load config; using defaults: {e}");
-            let s = settings::Settings::default();
-            debug!(
-                "Default fonts: heading={:?} ({}px), main={:?} ({}px)",
-                s.fonts.heading,
-                s.fonts.heading_size_px,
-                s.fonts.main,
-                s.fonts.main_size_px
-            );
-            debug!(
-                "Default login: target={:?} username={:?}",
-                s.login.target,
-                s.login.username
-            );
-            debug!(
-                "Default ui: hide_target={} hide_username={} gap_below_session_px={} gap_below_username_px={} row_h={} password_char={:?} text_align={:?} input_margin_px={} heading_offset_y_px={} blackout_on_success={} form_width={} form_height={}",
-                s.ui.hide_target,
-                s.ui.hide_username,
-                s.ui.gap_below_session_px,
-                s.ui.gap_below_username_px,
-                s.ui.row_h,
-                s.ui.password_char,
-                s.ui.text_align,
-                s.ui.input_margin_px,
-                s.ui.heading_offset_y_px,
-                s.ui.blackout_on_success,
-                s.ui.form_width,
-                s.ui.form_height
-            );
-            s
+            settings::Settings::default()
         }
     };
+    debug!("Settings: {settings:#?}");
 
     let colors = match settings.resolve_colors() {
-        Ok(c) => {
-            debug!(
-                "Configured colors: fg={:?} bg={:?} neutral={:?} selected={:?} error={:?}",
-                settings.colors.foreground,
-                settings.colors.background,
-                settings.colors.neutral,
-                settings.colors.selected,
-                settings.colors.error
-            );
-            c
-        }
+        Ok(c) => c,
         Err(e) => {
             warn!("Invalid colors in config; using defaults: {e}");
             settings::Settings::default()
