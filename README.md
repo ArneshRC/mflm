@@ -57,5 +57,47 @@ input_margin_px = 15
 
 ```
 
+## Header
+
+The heading text is a template. `{hostname}` is replaced with the machine's
+hostname; use `{{` and `}}` for literal braces.
+
+```toml
+[header]
+text = "Welcome to {hostname}"
+```
+
+## Power actions
+
+An optional row of power actions can be shown below the form. Each action is
+bound to an F-key (F1-F12). Pressing it highlights the action; press Enter to
+confirm or any other key to cancel. Actions appear in the order they are
+listed, and with none listed there is no row.
+
+```toml
+[colors]
+confirm = "#aaccee"       # highlight of an action awaiting confirmation; defaults to `selected`
+
+[power]
+font = "JetBrainsMono Nerd Font Mono"   # defaults to fonts.main
+size_px = 18
+gap_px = 32               # between actions
+offset_y_px = 48          # between the form and the row
+
+[[power.action]]
+kind = "shutdown"         # shutdown | reboot | suspend | hibernate
+key = "F1"
+icon = "⏻"                # optional, e.g. a Nerd Font glyph
+label = "Shutdown"        # optional, defaults per kind
+
+[[power.action]]
+kind = "reboot"
+key = "F2"
+command = ["loginctl", "reboot"]   # optional, defaults to `systemctl <verb>`
+```
+
+Commands run directly (no shell) as the greeter user, so that user must be
+allowed to power off, e.g. via polkit or logind.
+
 # Future plans:
 * Add modules on the headline (datetime etc.)
