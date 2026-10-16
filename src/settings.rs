@@ -43,7 +43,10 @@ pub struct Colors {
     /// Used for selections / active fields / in-progress actions.
     pub selected: String,
     /// Used for errors (e.g. auth failure).
-    pub error: String
+    pub error: String,
+    /// Background of a power action awaiting confirmation. Defaults to
+    /// `selected`.
+    pub confirm: Option<String>
 }
 
 impl Default for Colors {
@@ -53,7 +56,8 @@ impl Default for Colors {
             background: "#000000".to_string(),
             neutral: "#cccccc".to_string(),
             selected: "#aaccee".to_string(),
-            error: "#ecbcad".to_string()
+            error: "#ecbcad".to_string(),
+            confirm: None
         }
     }
 }
@@ -64,7 +68,8 @@ pub struct ResolvedColors {
     pub background: Color,
     pub neutral: Color,
     pub selected: Color,
-    pub error: Color
+    pub error: Color,
+    pub confirm: Color
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
@@ -89,6 +94,49 @@ impl Default for Header {
     fn default() -> Self {
         Self {
             text: "Welcome to {hostname}".to_string()
+        }
+    }
+}
+
+/// One entry of `[[power.action]]`. Fields are loosely typed so a bad entry
+/// is skipped (see `power::resolve`) instead of failing the whole config.
+#[derive(Default, Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct PowerAction {
+    /// "shutdown", "reboot", "suspend" or "hibernate".
+    pub kind: String,
+    /// "F1" through "F12".
+    pub key: String,
+    /// Defaults per kind, e.g. "Shutdown".
+    pub label: Option<String>,
+    /// Usually a Nerd Font glyph. Empty means no icon.
+    pub icon: String,
+    /// argv, run without a shell. Defaults to `systemctl <verb>`.
+    pub command: Option<Vec<String>>
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Power {
+    /// Pango font description. Defaults to `fonts.main`.
+    pub font: Option<String>,
+    pub size_px: f32,
+    /// Horizontal gap between actions.
+    pub gap_px: u32,
+    /// Gap between the bottom of the form and the row.
+    pub offset_y_px: u32,
+    /// Actions in on-screen order. Empty means no power row.
+    pub action: Vec<PowerAction>
+}
+
+impl Default for Power {
+    fn default() -> Self {
+        Self {
+            font: None,
+            size_px: 18.0,
+            gap_px: 32,
+            offset_y_px: 48,
+            action: Vec::new()
         }
     }
 }
@@ -148,6 +196,7 @@ pub struct Settings {
     pub colors: Colors,
     pub login: Login,
     pub header: Header,
+    pub power: Power,
     pub ui: Ui
 }
 
@@ -168,12 +217,17 @@ impl Settings {
     }
 
     pub fn resolve_colors(&self) -> Result<ResolvedColors, ParseColorError> {
+        let selected = Color::from_hex(&self.colors.selected)?;
         Ok(ResolvedColors {
             foreground: Color::from_hex(&self.colors.foreground)?,
             background: Color::from_hex(&self.colors.background)?,
             neutral: Color::from_hex(&self.colors.neutral)?,
-            selected: Color::from_hex(&self.colors.selected)?,
-            error: Color::from_hex(&self.colors.error)?
+            selected,
+            error: Color::from_hex(&self.colors.error)?,
+            confirm: match &self.colors.confirm {
+                Some(c) => Color::from_hex(c)?,
+                None => selected
+            }
         })
     }
 }

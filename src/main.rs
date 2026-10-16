@@ -23,6 +23,7 @@ mod draw;
 mod greetd;
 mod greeter_loop;
 mod layout;
+mod power;
 mod settings;
 mod template;
 mod vt;
@@ -104,6 +105,14 @@ struct LoginManager<'a> {
     colors: settings::ResolvedColors,
     header: template::Template,
 
+    power_font: draw::Font,
+    power_items: Vec<power::Item>,
+    power_item_h: u32,
+    power_gap_px: u32,
+    power_offset_y_px: u32,
+    // index into power_items of the action awaiting confirmation
+    power_armed: Option<usize>,
+
     forced_username: Option<String>,
     lock_target: bool,
     hide_target: bool,
@@ -141,6 +150,7 @@ impl<'a> LoginManager<'a> {
         colors: settings::ResolvedColors,
         login: &settings::Login,
         header: &settings::Header,
+        power: &settings::Power,
         ui: &settings::Ui
     ) -> Self {
         let forced_username = login
@@ -195,13 +205,45 @@ impl<'a> LoginManager<'a> {
         let session_left_arrow = ui.session_left_arrow.trim().to_string();
         let session_right_arrow = ui.session_right_arrow.trim().to_string();
 
-        Self {
+        let power_font = draw::Font::new(
+            power.font.as_deref().unwrap_or(&fonts.main),
+            power.size_px
+        );
+        let pad_x = (power.size_px * 0.6).round().max(0.0) as u32;
+        let pad_y = (power.size_px * 0.3).round().max(0.0) as u32;
+        let mut power_items = Vec::new();
+        for action in power::resolve(&power.action) {
+            let text = action.text();
+            match power_font.measure(&text) {
+                Ok((w, text_h)) => power_items.push(power::Item {
+                    action,
+                    text,
+                    w: w + pad_x * 2,
+                    text_h
+                }),
+                Err(e) => warn!("Skipping power action {text:?}: {e}")
+            }
+        }
+        let power_item_h = power_items
+            .iter()
+            .map(|item| item.text_h)
+            .max()
+            .unwrap_or(0)
+            + pad_y * 2;
+
+        let lm = Self {
             buf: &mut fb.frame,
             device: &fb.device,
             heading_font: draw::Font::new(&fonts.heading, fonts.heading_size_px),
             main_font: draw::Font::new(&fonts.main, fonts.main_size_px),
             colors,
             header: template::Template::parse(&header.text),
+            power_font,
+            power_items,
+            power_item_h,
+            power_gap_px: power.gap_px,
+            power_offset_y_px: power.offset_y_px,
+            power_armed: None,
             forced_username,
             lock_target,
             hide_target: ui.hide_target,
@@ -224,7 +266,17 @@ impl<'a> LoginManager<'a> {
             target_index, // TODO: remember last user selection
             var_screen_info: &fb.var_screen_info,
             should_refresh: false
+        };
+
+        if !lm.power_items.is_empty() && lm.power_row_layout().is_none() {
+            warn!("Power row does not fit on screen; not drawing it");
         }
+
+        lm
+    }
+
+    fn power_action_for_key(&self, key: u8) -> Option<usize> {
+        self.power_items.iter().position(|item| item.action.key == key)
     }
 
     pub(crate) fn show_target_row(&self) -> bool {
@@ -350,6 +402,7 @@ fn main() {
         colors,
         &settings.login,
         &settings.header,
+        &settings.power,
         &settings.ui,
     );
 

@@ -34,6 +34,21 @@ impl Font {
         }
     }
 
+    /// Pixel size of `text` laid out on a single line.
+    pub fn measure(&self, text: &str) -> Result<(u32, u32), DrawError> {
+        let tmp = ImageSurface::create(Format::ARgb32, 1, 1).map_err(|e| {
+            DrawError::Render(format!("failed to create cairo surface: {e:?}"))
+        })?;
+        let ctx = Context::new(&tmp).map_err(|e| {
+            DrawError::Render(format!("failed to create cairo context: {e:?}"))
+        })?;
+        let layout = pangocairo::create_layout(&ctx);
+        layout.set_font_description(Some(&self.desc));
+        layout.set_text(text);
+        let (w, h) = layout.pixel_size();
+        Ok((w.max(0) as u32, h.max(1) as u32))
+    }
+
     fn render_to_surface_aligned(
         &self,
         bg: &Color,
@@ -247,6 +262,42 @@ impl crate::LoginManager<'_> {
                 self.colors.neutral
             };
             Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
+        }
+
+        self.draw_power_row()?;
+
+        self.should_refresh = true;
+
+        Ok(())
+    }
+
+    pub(crate) fn draw_power_row(&mut self) -> Result<(), crate::Error> {
+        let layout = match self.power_row_layout() {
+            Some(layout) => layout,
+            None => return Ok(())
+        };
+
+        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
+        for (i, (item, x)) in self.power_items.iter().zip(layout.xs).enumerate()
+        {
+            let (bg, fg) = if self.power_armed == Some(i) {
+                (self.colors.confirm, self.colors.background)
+            } else {
+                (self.colors.background, self.colors.foreground)
+            };
+
+            let mut cell = buf.subdimensions((x, layout.y, item.w, layout.h))?;
+            cell.memset(&bg);
+
+            let text_h = item.text_h.min(layout.h);
+            let mut text = cell.subdimensions((
+                0,
+                (layout.h - text_h) / 2,
+                item.w,
+                text_h
+            ))?;
+            self.power_font
+                .auto_draw_text_centered(&mut text, &bg, &fg, &item.text)?;
         }
 
         self.should_refresh = true;

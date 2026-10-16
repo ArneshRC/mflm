@@ -10,7 +10,57 @@ pub(crate) struct FormLayout {
     pub(crate) password_y: u32
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct PowerRowLayout {
+    pub(crate) y: u32,
+    pub(crate) h: u32,
+    /// Left edge of each item, in `power_items` order.
+    pub(crate) xs: Vec<u32>
+}
+
 impl crate::LoginManager<'_> {
+    /// Row of power actions centered below the form, or None if there are no
+    /// actions or the row does not fit on screen.
+    pub(crate) fn power_row_layout(&self) -> Option<PowerRowLayout> {
+        if self.power_items.is_empty() {
+            return None;
+        }
+
+        let form = self.form_layout();
+        let y = form
+            .y
+            .checked_add(form.total_h)?
+            .checked_add(self.power_offset_y_px)?;
+        let h = self.power_item_h;
+        if y.checked_add(h)? > self.screen_size.1 {
+            return None;
+        }
+
+        let gaps = self
+            .power_gap_px
+            .checked_mul(self.power_items.len() as u32 - 1)?;
+        let total_w = self
+            .power_items
+            .iter()
+            .try_fold(gaps, |sum, item| sum.checked_add(item.w))?;
+        if total_w > self.screen_size.0 {
+            return None;
+        }
+
+        let mut x = (self.screen_size.0 - total_w) / 2;
+        let xs = self
+            .power_items
+            .iter()
+            .map(|item| {
+                let out = x;
+                x += item.w + self.power_gap_px;
+                out
+            })
+            .collect();
+
+        Some(PowerRowLayout { y, h, xs })
+    }
+
     pub(crate) fn form_layout(&self) -> FormLayout {
         let row_h = self.row_h;
         let gap_below_session_px = self.gap_below_session_px;

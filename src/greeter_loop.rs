@@ -59,6 +59,7 @@ impl crate::LoginManager<'_> {
         let mut last_password_len = password.len();
         let mut last_target_index = self.target_index;
         let mut last_mode = self.mode;
+        let mut last_power_armed = self.power_armed;
         let mut needs_redraw = false;
 
         let mut tty = crate::vt::Tty::new();
@@ -105,6 +106,13 @@ impl crate::LoginManager<'_> {
                     return;
                 }
                 last_target_index = self.target_index;
+            }
+            if last_power_armed != self.power_armed {
+                if let Err(e) = self.draw_power_row() {
+                    error!("Fatal: unable to draw power actions: {e}");
+                    return;
+                }
+                last_power_armed = self.power_armed;
             }
             if last_mode != self.mode {
                 let bg = self.colors.neutral;
@@ -170,7 +178,37 @@ impl crate::LoginManager<'_> {
                 }
             };
 
+            if let Some(i) = self.power_armed {
+                // Enter confirms, another action's key re-arms, anything
+                // else cancels and is swallowed.
+                match key {
+                    Key::Enter => {
+                        self.power_armed = None;
+                        let action = self.power_items[i].action.clone();
+                        if let Err(e) = action.run() {
+                            warn!("Power action failed: {e}");
+                            let bg = self.colors.error;
+                            if let Err(e) = self.draw_bg(&bg) {
+                                error!("Fatal: unable to draw background: {e}");
+                                return;
+                            }
+                        }
+                        // also repaints after resuming from suspend/hibernate
+                        needs_redraw = true;
+                    }
+                    Key::F(n) => self.power_armed = self.power_action_for_key(n),
+                    _ => self.power_armed = None
+                }
+                self.refresh();
+                continue;
+            }
+
             match key {
+                Key::F(n) => {
+                    if let Some(i) = self.power_action_for_key(n) {
+                        self.power_armed = Some(i);
+                    }
+                }
                 Key::Ctrl('u') | Key::Ctrl('k') => match self.mode {
                     crate::Mode::SelectingSession => (),
                     crate::Mode::EditingUsername => {
