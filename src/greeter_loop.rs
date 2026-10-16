@@ -2,6 +2,8 @@ use log::{error, info, warn};
 
 use crate::vt::Key;
 
+const ERROR_FLASH: std::time::Duration = std::time::Duration::from_millis(500);
+
 impl crate::LoginManager<'_> {
     fn mode_allowed(&self, mode: crate::Mode) -> bool {
         match mode {
@@ -39,6 +41,16 @@ impl crate::LoginManager<'_> {
             }
         }
         from
+    }
+
+    // Shows the error color long enough to be seen before the caller
+    // repaints. Keys typed meanwhile stay buffered in the tty.
+    fn flash_error(&mut self) -> Result<(), crate::Error> {
+        let bg = self.colors.error;
+        self.draw_bg(&bg)?;
+        self.refresh();
+        std::thread::sleep(ERROR_FLASH);
+        Ok(())
     }
 
     fn goto_next_mode(&mut self) {
@@ -187,8 +199,7 @@ impl crate::LoginManager<'_> {
                         let action = self.power_items[i].action.clone();
                         if let Err(e) = action.run() {
                             warn!("Power action failed: {e}");
-                            let bg = self.colors.error;
-                            if let Err(e) = self.draw_bg(&bg) {
+                            if let Err(e) = self.flash_error() {
                                 error!("Fatal: unable to draw background: {e}");
                                 return;
                             }
@@ -302,8 +313,7 @@ impl crate::LoginManager<'_> {
                                 }
                                 Err(e) => {
                                     warn!("Login failed: {e}");
-                                    let bg = self.colors.error;
-                                    if let Err(e) = self.draw_bg(&bg) {
+                                    if let Err(e) = self.flash_error() {
                                         error!("Fatal: unable to draw background: {e}");
                                         return;
                                     }
