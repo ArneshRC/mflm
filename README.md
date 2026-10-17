@@ -29,7 +29,7 @@ command = "mflm"
 # The user to run the command as. The privileges this user must have depends
 # on the greeter. A graphical greeter may for example require the user to be
 # in the `video` group.
-user = "greetd"
+user = "greeter"
 ```
 
 And my mflm config looks like this:
