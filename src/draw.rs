@@ -376,16 +376,32 @@ impl crate::LoginManager<'_> {
             self.colors.foreground
         };
 
-        let session_name = &self.targets[self.target_index].name;
-        let text = match (
-            self.session_left_arrow.as_str(),
-            self.session_right_arrow.as_str()
-        ) {
-            ("", "") => session_name.to_string(),
-            (l, "") => format!("{l}  {session_name}"),
-            ("", r) => format!("{session_name}  {r}"),
-            (l, r) => format!("{l}  {session_name}  {r}")
+        let (left, right) =
+            (self.session_left_arrow.as_str(), self.session_right_arrow.as_str());
+        let with_arrows = |name: &str| match (left, right) {
+            ("", "") => name.to_string(),
+            (l, "") => format!("{l}  {name}"),
+            ("", r) => format!("{name}  {r}"),
+            (l, r) => format!("{l}  {name}  {r}")
         };
+
+        // Shorten the name with an ellipsis until the row fits on one line.
+        let session_name = &self.targets[self.target_index].name;
+        let mut text = with_arrows(session_name);
+        if self.main_font.measure(&text)?.0 > layout.w {
+            let mut cuts: Vec<usize> =
+                session_name.char_indices().map(|(i, _)| i).collect();
+            cuts.reverse();
+            for cut in cuts {
+                text = with_arrows(&format!(
+                    "{}…",
+                    session_name[..cut].trim_end()
+                ));
+                if self.main_font.measure(&text)?.0 <= layout.w {
+                    break;
+                }
+            }
+        }
 
         self.main_font
             .auto_draw_text_centered(&mut buf, &bg, &fg, &text)?;
