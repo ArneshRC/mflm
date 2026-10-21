@@ -196,7 +196,16 @@ pub struct Ui {
     pub form_width: u32,
     pub form_height: u32,
     pub session_left_arrow: String,
-    pub session_right_arrow: String
+    pub session_right_arrow: String,
+    /// Shown left of the username, usually a Nerd Font glyph such as
+    /// "". Empty means no icon.
+    pub username_icon: String,
+    /// Shown left of the password, e.g. "". Empty means no icon.
+    pub password_icon: String,
+    /// Pango font description for the icons. Defaults to `fonts.main`.
+    pub icon_font: Option<String>,
+    /// Gap between an icon and its field's text.
+    pub icon_gap_px: u32
 }
 
 impl Default for Ui {
@@ -215,7 +224,11 @@ impl Default for Ui {
             form_width: 512,
             form_height: 168,
             session_left_arrow: "❮".to_string(),
-            session_right_arrow: "❯".to_string()
+            session_right_arrow: "❯".to_string(),
+            username_icon: String::new(),
+            password_icon: String::new(),
+            icon_font: None,
+            icon_gap_px: 24
         }
     }
 }

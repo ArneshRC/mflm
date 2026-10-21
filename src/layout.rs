@@ -147,3 +147,82 @@ impl crate::LoginManager<'_> {
         }
     }
 }
+
+/// Horizontal split of an input row into an icon column starting at
+/// `icon_x` and a text area of `text_w` starting at `text_x`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct FieldColumns {
+    pub(crate) icon_x: u32,
+    pub(crate) text_x: u32,
+    pub(crate) text_w: u32
+}
+
+/// `icon_col_w` is the icon column including its gap, 0 for no icons.
+pub(crate) fn field_columns(
+    row_w: u32,
+    margin: u32,
+    icon_col_w: u32,
+    align: crate::settings::TextAlign
+) -> FieldColumns {
+    let margin = margin.min(row_w / 2);
+    let inner_w = row_w - margin * 2;
+    // Centered text reserves the icon column on the right too, so it stays
+    // centered on the form like the heading and session row.
+    let reserved = match align {
+        crate::settings::TextAlign::Center => icon_col_w.saturating_mul(2),
+        _ => icon_col_w
+    };
+    FieldColumns {
+        icon_x: margin,
+        text_x: margin + icon_col_w.min(inner_w),
+        text_w: inner_w.saturating_sub(reserved)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::TextAlign;
+
+    fn cols(icon_x: u32, text_x: u32, text_w: u32) -> FieldColumns {
+        FieldColumns {
+            icon_x,
+            text_x,
+            text_w
+        }
+    }
+
+    #[test]
+    fn no_icons() {
+        assert_eq!(field_columns(500, 15, 0, TextAlign::Left), cols(15, 15, 470));
+        assert_eq!(field_columns(500, 15, 0, TextAlign::Center), cols(15, 15, 470));
+    }
+
+    #[test]
+    fn left_and_right_reserve_column_once() {
+        assert_eq!(field_columns(500, 15, 50, TextAlign::Left), cols(15, 65, 420));
+        assert_eq!(field_columns(500, 15, 50, TextAlign::Right), cols(15, 65, 420));
+    }
+
+    #[test]
+    fn center_reserves_column_on_both_sides() {
+        assert_eq!(field_columns(500, 15, 50, TextAlign::Center), cols(15, 65, 370));
+    }
+
+    #[test]
+    fn margin_capped_at_half_row() {
+        assert_eq!(field_columns(20, 15, 0, TextAlign::Left), cols(10, 10, 0));
+    }
+
+    #[test]
+    fn icons_wider_than_row_stay_in_bounds() {
+        let c = field_columns(100, 10, 500, TextAlign::Center);
+        assert_eq!(c, cols(10, 90, 0));
+        assert!(c.text_x + c.text_w <= 100);
+    }
+
+    #[test]
+    fn zero_width_row() {
+        assert_eq!(field_columns(0, 15, 50, TextAlign::Left), cols(0, 0, 0));
+    }
+}

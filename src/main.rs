@@ -20,6 +20,7 @@ const FB_ACTIVATE_FORCE: u32 = 128;
 mod buffer;
 mod color;
 mod draw;
+mod field_icon;
 mod greetd;
 mod greeter_loop;
 mod layout;
@@ -107,6 +108,8 @@ struct LoginManager<'a> {
 
     heading_font: draw::Font,
     main_font: draw::Font,
+    icon_font: draw::Font,
+    field_icons: field_icon::FieldIcons,
 
     colors: settings::ResolvedColors,
     header: template::Template,
@@ -273,11 +276,18 @@ impl<'a> LoginManager<'a> {
             (None, 0)
         };
 
-        let lm = Self {
+        let main_font = draw::Font::new(&fonts.main, fonts.main_size_px);
+        let icon_font = draw::Font::new(
+            ui.icon_font.as_deref().unwrap_or(&fonts.main),
+            fonts.main_size_px
+        );
+        let mut lm = Self {
             buf: &mut fb.frame,
             device: &fb.device,
             heading_font: draw::Font::new(&fonts.heading, fonts.heading_size_px),
-            main_font: draw::Font::new(&fonts.main, fonts.main_size_px),
+            main_font,
+            icon_font,
+            field_icons: field_icon::FieldIcons::default(),
             colors,
             header: template::Template::parse(&header.text),
             power_font,
@@ -316,6 +326,30 @@ impl<'a> LoginManager<'a> {
             var_screen_info: &fb.var_screen_info,
             should_refresh: false
         };
+
+        lm.field_icons = field_icon::resolve(
+            &ui.username_icon,
+            &ui.password_icon,
+            ui.icon_gap_px,
+            &lm.icon_font,
+            &lm.main_font,
+            lm.show_username_row()
+        );
+        if !lm.field_icons.is_empty() {
+            let form = lm.form_layout();
+            let with = layout::field_columns(
+                form.w,
+                lm.input_margin_px,
+                lm.field_icons.col_w,
+                lm.text_align
+            );
+            let without =
+                layout::field_columns(form.w, lm.input_margin_px, 0, lm.text_align);
+            if with.text_w < without.text_w / 2 {
+                warn!("Field icons leave less than half the field for text; not drawing them");
+                lm.field_icons = field_icon::FieldIcons::default();
+            }
+        }
 
         if !lm.power_items.is_empty() && lm.power_row_layout().is_none() {
             warn!("Power row does not fit on screen; not drawing it");

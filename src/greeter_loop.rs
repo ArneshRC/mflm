@@ -111,6 +111,12 @@ impl crate::LoginManager<'_> {
             last_username_len = username.len();
         }
 
+        // draw_bg only draws the underline; this adds the icon
+        if let Err(e) = self.draw_password(&password, true) {
+            error!("Fatal: unable to draw password prompt: {e}");
+            return;
+        }
+
         loop {
             if self.show_username_row() && username.len() != last_username_len {
                 if let Err(e) = self.draw_username(

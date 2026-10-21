@@ -54,8 +54,12 @@ username = "arneshrc"
 password_char = "•"
 text_align = "left"
 input_margin_px = 15
+username_icon = "\uf007"
+password_icon = "\uf084"
 
 ```
+
+The icon font has to be installed system-wide (e.g. under `/usr/share/fonts`) since the greeter user can't see fonts in your home directory. A missing glyph is logged and the icon is left out. "Mono" Nerd Font variants draw icons at single-cell width; use the "Propo" variant or "Symbols Nerd Font" as `icon_font` for full-size icons.
 
 # Future plans:
 * Add modules on the headline (datetime etc.)

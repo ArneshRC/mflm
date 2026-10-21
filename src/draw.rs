@@ -34,8 +34,10 @@ impl Font {
         }
     }
 
-    /// Pixel size of `text` laid out on a single line.
-    pub fn measure(&self, text: &str) -> Result<(u32, u32), DrawError> {
+    fn single_line_layout(
+        &self,
+        text: &str
+    ) -> Result<pango::Layout, DrawError> {
         let tmp = ImageSurface::create(Format::ARgb32, 1, 1).map_err(|e| {
             DrawError::Render(format!("failed to create cairo surface: {e:?}"))
         })?;
@@ -45,8 +47,26 @@ impl Font {
         let layout = pangocairo::create_layout(&ctx);
         layout.set_font_description(Some(&self.desc));
         layout.set_text(text);
-        let (w, h) = layout.pixel_size();
+        Ok(layout)
+    }
+
+    /// Pixel size of `text` laid out on a single line.
+    pub fn measure(&self, text: &str) -> Result<(u32, u32), DrawError> {
+        let (w, h) = self.single_line_layout(text)?.pixel_size();
         Ok((w.max(0) as u32, h.max(1) as u32))
+    }
+
+    /// Distance from the top of `text`'s line to its baseline, in pixels.
+    pub fn baseline(&self, text: &str) -> Result<u32, DrawError> {
+        let baseline = self.single_line_layout(text)?.baseline();
+        Ok((baseline / pango::SCALE).max(0) as u32)
+    }
+
+    /// Number of glyphs in `text` that no installed font provides. Pango
+    /// draws those as hex boxes.
+    pub fn missing_glyphs(&self, text: &str) -> Result<u32, DrawError> {
+        let count = self.single_line_layout(text)?.unknown_glyphs_count();
+        Ok(count.max(0) as u32)
     }
 
     fn render_to_surface_aligned(
@@ -421,7 +441,8 @@ impl crate::LoginManager<'_> {
             None => return Ok(())
         };
         let focused = self.mode == crate::Mode::EditingUsername;
-        self.draw_field(y, username, focused, redraw)
+        let icon = self.field_icons.username.clone();
+        self.draw_field(y, username, focused, redraw, icon)
     }
 
     pub(crate) fn draw_password(
@@ -437,17 +458,19 @@ impl crate::LoginManager<'_> {
         }
 
         let focused = self.mode == crate::Mode::EditingPassword;
-        self.draw_field(y, &stars, focused, redraw)
+        let icon = self.field_icons.password.clone();
+        self.draw_field(y, &stars, focused, redraw, icon)
     }
 
-    /// Input row at `y` showing `text` above an underline. `redraw` clears
-    /// the row first, needed when the text got shorter.
+    /// Input row at `y` showing `icon` and `text` above an underline.
+    /// `redraw` clears the row first, needed when the text got shorter.
     fn draw_field(
         &mut self,
         y: u32,
         text: &str,
         focused: bool,
-        redraw: bool
+        redraw: bool,
+        icon: Option<crate::field_icon::FieldIcon>
     ) -> Result<(), crate::Error> {
         let layout = self.form_layout();
 
@@ -464,6 +487,12 @@ impl crate::LoginManager<'_> {
         } else {
             self.colors.foreground
         };
+        // the icon is a label, so it follows the underline, not the text
+        let border = if focused {
+            self.colors.selected
+        } else {
+            self.colors.neutral
+        };
 
         let align = match self.text_align {
             crate::settings::TextAlign::Left => pango::Alignment::Left,
@@ -471,22 +500,41 @@ impl crate::LoginManager<'_> {
             crate::settings::TextAlign::Right => pango::Alignment::Right
         };
 
-        let margin = self.input_margin_px.min(layout.w / 2);
-        if margin > 0 {
-            let inner_w = layout.w.saturating_sub(margin * 2);
-            let mut inner = buf.subdimensions((margin, 0, inner_w, layout.row_h))?;
-            self.main_font
-                .auto_draw_text_aligned(&mut inner, &bg, &fg, text, align)?;
-        } else {
-            self.main_font
-                .auto_draw_text_aligned(&mut buf, &bg, &fg, text, align)?;
+        let cols = crate::layout::field_columns(
+            layout.w,
+            self.input_margin_px,
+            self.field_icons.col_w,
+            self.text_align
+        );
+
+        // Typing never moves the icon, so it only needs drawing on redraw.
+        if let (true, Some(icon)) = (redraw, icon) {
+            let dy = icon.dy.min(layout.row_h);
+            let mut cell = buf.subdimensions((
+                cols.icon_x,
+                dy,
+                cols.text_x - cols.icon_x,
+                layout.row_h - dy
+            ))?;
+            self.icon_font.auto_draw_text_aligned(
+                &mut cell,
+                &bg,
+                &border,
+                &icon.text,
+                pango::Alignment::Left
+            )?;
         }
 
-        let border = if focused {
-            self.colors.selected
-        } else {
-            self.colors.neutral
-        };
+        let dy = self.field_icons.text_dy.min(layout.row_h);
+        let mut inner = buf.subdimensions((
+            cols.text_x,
+            dy,
+            cols.text_w,
+            layout.row_h - dy
+        ))?;
+        self.main_font
+            .auto_draw_text_aligned(&mut inner, &bg, &fg, text, align)?;
+
         Self::draw_underline(&mut buf, layout.w, layout.row_h, &border);
 
         self.should_refresh = true;
