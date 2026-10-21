@@ -167,7 +167,7 @@ impl Default for Status {
             show: true,
             font: None,
             size_px: 18.0,
-            offset_y_px: 24
+            offset_y_px: 48
         }
     }
 }
