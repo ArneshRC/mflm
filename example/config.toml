@@ -1,0 +1,142 @@
+# Copy to /etc/mflm/config.toml. Every key is optional; the values below are
+# the defaults. Lengths and font sizes are in pixels. Colors are "#RRGGBB" or
+# "#AARRGGBB". A font is { family, size }, where family is a Pango font
+# description and any missing key is inherited from the parent font.
+
+# What happens around logging in
+[login]
+# Blank the screen once login succeeds
+clear_screen_on_success = true
+
+# Defaults inherited by every element
+[theme]
+# Base font for the form, status line and power row
+font = { family = "Monospace", size = 42 }
+
+# Color palette
+[theme.colors]
+# Normal text
+text = "#fafafa"
+# Screen background
+background = "#000000"
+# Unfocused underlines, info status and the power hint
+muted = "#cccccc"
+# Focused field and active session
+accent = "#aaccee"
+# Errors such as a failed login
+error = "#ecbcad"
+# Background of a power action awaiting confirmation; defaults to accent
+# confirm = "#aaccee"
+
+# Heading at the top of the screen
+[header]
+# Supports {hostname}; use {{ and }} for literal braces
+text = "Welcome to {hostname}"
+# Does not inherit from theme.font
+font = { family = "Sans", size = 72 }
+# Gap between the top of the screen and the heading
+offset = 24
+
+# Login form, centered on screen
+[form]
+# Capped to the screen width minus a margin
+width = 512
+# Height of each row
+row_height = 72
+# Alignment of field text: "left", "center" or "right"
+text_align = "center"
+# Horizontal inset of the text in a row
+padding = 15
+# Defaults to theme.font
+# font = { family = "Monospace", size = 42 }
+
+# Icons left of the username and password fields
+[form.icons]
+# Defaults to form.font. Must be installed system-wide; use a "Propo" Nerd
+# Font or "Symbols Nerd Font" for full-size icons
+# font = { family = "Symbols Nerd Font" }
+# Gap between an icon and its field's text
+gap = 24
+
+# Session row; switch sessions with the left and right arrow keys
+[form.session]
+# Session name to preselect, as listed in its .desktop file
+# default = "Niri"
+# Hide the row and always use default; ignored if default is not found
+locked = false
+# Drawn left and right of the session name; "" hides one
+arrows = ["❮", "❯"]
+# Gap between this row and the next
+gap_below = 64
+
+# Username row
+[form.username]
+# Username to prefill
+# default = "alice"
+# Hide the row and always use default
+locked = false
+# Usually a Nerd Font glyph such as ""; "" means no icon
+icon = ""
+# Gap between this row and the password row
+gap_below = 32
+
+# Password row
+[form.password]
+# Usually a Nerd Font glyph such as ""; "" means no icon
+icon = ""
+# Drawn once per typed character
+mask = "•"
+
+# Line below the form showing "Logging in…", "Login failed" and similar
+[status]
+# When false, errors flash the form in the error color instead
+enabled = true
+# Family defaults to theme.font
+font = { size = 18 }
+# Gap between the bottom of the form and the line
+offset = 48
+
+# Row of power actions centered below the form
+[power]
+# Family defaults to theme.font
+font = { size = 18 }
+# Horizontal gap between actions
+gap = 32
+# Gap between the bottom of the form and the row
+offset = 240
+
+# "[Enter] Accept" and "[Esc] Cancel" hint shown under an action awaiting confirmation
+[power.hint]
+# Defaults to power.font at 70% of its size
+# font = { size = 12.6 }
+# Gap between the power row and the hint
+offset = 8
+
+# One entry per action, in on-screen order. No entries means no power row.
+# Press the key to select an action, then Enter to run it or Esc to cancel.
+[[power.actions]]
+# "shutdown", "reboot", "suspend" or "hibernate"
+kind = "shutdown"
+# "F1" through "F12"
+key = "F1"
+# Usually a Nerd Font glyph; "" means no icon
+icon = ""
+# Defaults per kind, e.g. "Shutdown"
+label = "Shutdown"
+# argv, run without a shell; defaults to systemctl with the matching verb
+command = ["systemctl", "poweroff"]
+
+[[power.actions]]
+kind = "reboot"
+key = "F2"
+label = "Restart"
+
+[[power.actions]]
+kind = "suspend"
+key = "F3"
+label = "Sleep"
+
+[[power.actions]]
+kind = "hibernate"
+key = "F4"
+label = "Hibernate"
