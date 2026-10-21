@@ -416,53 +416,12 @@ impl crate::LoginManager<'_> {
         username: &str,
         redraw: bool
     ) -> Result<(), crate::Error> {
-        let layout = self.form_layout();
-        let y = match layout.username_y {
+        let y = match self.form_layout().username_y {
             Some(y) => y,
             None => return Ok(())
         };
-
-        let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
-        let mut buf =
-            buf.subdimensions((layout.x, y, layout.w, layout.row_h))?;
-        let bg = self.colors.background;
-        if redraw {
-            buf.memset(&bg);
-        }
-
-        let fg = if self.mode == crate::Mode::EditingUsername {
-            self.colors.selected
-        } else {
-            self.colors.foreground
-        };
-
-        let align = match self.text_align {
-            crate::settings::TextAlign::Left => pango::Alignment::Left,
-            crate::settings::TextAlign::Center => pango::Alignment::Center,
-            crate::settings::TextAlign::Right => pango::Alignment::Right
-        };
-
-        let margin = self.input_margin_px.min(layout.w / 2);
-        if margin > 0 {
-            let inner_w = layout.w.saturating_sub(margin * 2);
-            let mut inner = buf.subdimensions((margin, 0, inner_w, layout.row_h))?;
-            self.main_font
-                .auto_draw_text_aligned(&mut inner, &bg, &fg, username, align)?;
-        } else {
-            self.main_font
-                .auto_draw_text_aligned(&mut buf, &bg, &fg, username, align)?;
-        }
-
-        let border = if self.mode == crate::Mode::EditingUsername {
-            self.colors.selected
-        } else {
-            self.colors.neutral
-        };
-        Self::draw_underline(&mut buf, layout.w, layout.row_h, &border);
-
-        self.should_refresh = true;
-
-        Ok(())
+        let focused = self.mode == crate::Mode::EditingUsername;
+        self.draw_field(y, username, focused, redraw)
     }
 
     pub(crate) fn draw_password(
@@ -470,8 +429,27 @@ impl crate::LoginManager<'_> {
         password: &str,
         redraw: bool
     ) -> Result<(), crate::Error> {
+        let y = self.form_layout().password_y;
+
+        let mut stars = String::new();
+        for _ in 0..password.chars().count() {
+            stars.push_str(&self.password_char);
+        }
+
+        let focused = self.mode == crate::Mode::EditingPassword;
+        self.draw_field(y, &stars, focused, redraw)
+    }
+
+    /// Input row at `y` showing `text` above an underline. `redraw` clears
+    /// the row first, needed when the text got shorter.
+    fn draw_field(
+        &mut self,
+        y: u32,
+        text: &str,
+        focused: bool,
+        redraw: bool
+    ) -> Result<(), crate::Error> {
         let layout = self.form_layout();
-        let y = layout.password_y;
 
         let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
         let mut buf =
@@ -481,12 +459,7 @@ impl crate::LoginManager<'_> {
             buf.memset(&bg);
         }
 
-        let mut stars = String::new();
-        for _ in 0..password.chars().count() {
-            stars.push_str(&self.password_char);
-        }
-
-        let fg = if self.mode == crate::Mode::EditingPassword {
+        let fg = if focused {
             self.colors.selected
         } else {
             self.colors.foreground
@@ -503,14 +476,13 @@ impl crate::LoginManager<'_> {
             let inner_w = layout.w.saturating_sub(margin * 2);
             let mut inner = buf.subdimensions((margin, 0, inner_w, layout.row_h))?;
             self.main_font
-                .auto_draw_text_aligned(&mut inner, &bg, &fg, &stars, align)?;
+                .auto_draw_text_aligned(&mut inner, &bg, &fg, text, align)?;
         } else {
             self.main_font
-                .auto_draw_text_aligned(&mut buf, &bg, &fg, &stars, align)?;
+                .auto_draw_text_aligned(&mut buf, &bg, &fg, text, align)?;
         }
 
-        // Bottom border under password input.
-        let border = if self.mode == crate::Mode::EditingPassword {
+        let border = if focused {
             self.colors.selected
         } else {
             self.colors.neutral
