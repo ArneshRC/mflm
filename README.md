@@ -14,7 +14,9 @@ Continuation/fork of prior work by [deathowl](https://github.com/deathowl/ddlm).
 ![](assets/mflm_fbgrab.png)
 
 # Setup
-My greetd config looks like :
+
+My greetd config looks like this:
+
 ```toml
 [terminal]
 # The VT to run the greeter on. Can be "next", "current" or a number
@@ -35,31 +37,58 @@ user = "greeter"
 And my mflm config looks like this:
 
 ```toml
-[fonts]
-heading = "Muli"
-main = "JetBrainsMono Nerd Font Mono"
-heading_size_px = 22
+[theme]
+font = { family = "JetBrainsMono Nerd Font Mono" }
 
-[colors]
-foreground = "#fafafa"
+[theme.colors]
+text = "#fafafa"
 background = "#000000"
-neutral = "#cccccc"
-selected = "#aaccee"
+muted = "#cccccc"
+accent = "#aaccee"
 error = "#ecbcad"
 
-[login]
-username = "arneshrc"
+[header]
+font = { family = "Muli", size = 25 }
 
-[ui]
-password_char = "•"
+[form]
 text_align = "left"
-input_margin_px = 15
-username_icon = "\uf007"
-password_icon = "\uf084"
+
+[form.session]
+default = "Niri"
+
+[form.username]
+default = "myuser"
+icon = "\uf007"
+
+[form.password]
+icon = "\uf084"
+mask = "•"
+
+[power]
+font = { size = 25 }
+
+[[power.actions]]
+kind = "shutdown"
+key = "F1"
+icon = "󰤆"
+label = "Shutdown"
+
+[[power.actions]]
+kind = "reboot"
+key = "F2"
+icon = ""
+label = "Restart"
+command = ["loginctl", "reboot"]
+
+[[power.actions]]
+kind = "suspend"
+key = "F3"
+icon = "󰤄"
+label = "Sleep"
 
 ```
 
-The icon font has to be installed system-wide (e.g. under `/usr/share/fonts`) since the greeter user can't see fonts in your home directory. A missing glyph is logged and the icon is left out. "Mono" Nerd Font variants draw icons at single-cell width; use the "Propo" variant or "Symbols Nerd Font" as `icon_font` for full-size icons.
+The icon font has to be installed system-wide (e.g. under `/usr/share/fonts`) since the greeter user can't see fonts in your home directory. A missing glyph is logged and the icon is left out. "Mono" Nerd Font variants draw icons at single-cell width; use the "Propo" variant or "Symbols Nerd Font" as `form.icons.font` for full-size icons.
 
 # Future plans:
 * Add modules on the headline (datetime etc.)

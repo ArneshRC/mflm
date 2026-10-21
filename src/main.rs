@@ -117,37 +117,36 @@ struct LoginManager<'a> {
     power_font: draw::Font,
     power_items: Vec<power::Item>,
     power_item_h: u32,
-    power_gap_px: u32,
-    power_offset_y_px: u32,
+    power_gap: u32,
+    power_offset: u32,
     // index into power_items of the action awaiting confirmation
     power_armed: Option<usize>,
     power_hint_font: draw::Font,
     power_hint_size: (u32, u32),
-    power_hint_offset_y_px: u32,
+    power_hint_offset: u32,
 
-    // None when [status] show = false
+    // None when [status] enabled = false
     status_font: Option<draw::Font>,
     status_h: u32,
-    status_offset_y_px: u32,
+    status_offset: u32,
     status: Option<Status>,
 
     forced_username: Option<String>,
     lock_target: bool,
-    hide_target: bool,
-    hide_username: bool,
-    gap_below_session_px: u32,
-    gap_below_username_px: u32,
+    lock_username: bool,
+    session_gap_below: u32,
+    username_gap_below: u32,
     row_h: u32,
-    password_char: String,
+    password_mask: String,
     text_align: settings::TextAlign,
-    input_margin_px: u32,
-    heading_offset_y_px: u32,
-    blackout_on_success: bool,
+    form_padding: u32,
+    header_offset: u32,
+    clear_screen_on_success: bool,
     session_left_arrow: String,
     session_right_arrow: String,
 
     screen_size: (u32, u32),
-    dimensions: (u32, u32),
+    form_width: u32,
     mode: Mode,
     greetd: greetd::GreetD,
     targets: Vec<Target>,
@@ -161,26 +160,23 @@ impl<'a> LoginManager<'a> {
     fn new(
         fb: &'a mut Framebuffer,
         screen_size: (u32, u32),
-        dimensions: (u32, u32),
         greetd: greetd::GreetD,
         targets: Vec<Target>,
-        fonts: &settings::Fonts,
-        colors: settings::ResolvedColors,
-        login: &settings::Login,
-        header: &settings::Header,
-        power: &settings::Power,
-        status: &settings::Status,
-        ui: &settings::Ui
+        settings: &settings::Settings,
+        colors: settings::ResolvedColors
     ) -> Self {
-        let forced_username = login
+        let form = &settings.form;
+        let forced_username = form
             .username
+            .default
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
 
-        let (target_index, forced_target_found) = match login
-            .target
+        let (target_index, forced_target_found) = match form
+            .session
+            .default
             .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
@@ -193,7 +189,7 @@ impl<'a> LoginManager<'a> {
                 }
                 None => {
                     warn!(
-                        "Configured login.target {forced:?} did not match any discovered session; leaving session selection enabled"
+                        "Configured form.session.default {forced:?} did not match any discovered session; leaving session selection enabled"
                     );
                     (0, false)
                 }
@@ -201,37 +197,37 @@ impl<'a> LoginManager<'a> {
             None => (0, false)
         };
 
-        let lock_target = forced_target_found && ui.hide_target;
+        let lock_target = forced_target_found && form.session.locked;
 
         if let Some(u) = forced_username.as_deref() {
             info!("Forcing username from config (len={})", u.len());
             debug!("Forced username: {u:?}");
         }
 
-        let mode = if forced_username.is_some() && ui.hide_username {
+        let lock_username = forced_username.is_some() && form.username.locked;
+        let mode = if lock_username {
             Mode::EditingPassword
         } else {
             Mode::EditingUsername
         };
 
-        let password_char = ui.password_char.trim();
-        let password_char = if password_char.is_empty() {
+        let password_mask = form.password.mask.trim();
+        let password_mask = if password_mask.is_empty() {
             "*".to_string()
         } else {
-            password_char.to_string()
+            password_mask.to_string()
         };
 
-        let session_left_arrow = ui.session_left_arrow.trim().to_string();
-        let session_right_arrow = ui.session_right_arrow.trim().to_string();
+        let [session_left_arrow, session_right_arrow] =
+            form.session.arrows.clone().map(|a| a.trim().to_string());
 
-        let power_font = draw::Font::new(
-            power.font.as_deref().unwrap_or(&fonts.main),
-            power.size_px
-        );
-        let pad_x = (power.size_px * 0.6).round().max(0.0) as u32;
-        let pad_y = (power.size_px * 0.3).round().max(0.0) as u32;
+        let power = &settings.power;
+        let power_spec = settings.power_font();
+        let power_font = draw::Font::new(&power_spec.family, power_spec.size);
+        let pad_x = (power_spec.size * 0.6).round().max(0.0) as u32;
+        let pad_y = (power_spec.size * 0.3).round().max(0.0) as u32;
         let mut power_items = Vec::new();
-        for action in power::resolve(&power.action) {
+        for action in power::resolve(&power.actions) {
             let text = action.text();
             match power_font.measure(&text) {
                 Ok((w, text_h)) => power_items.push(power::Item {
@@ -250,21 +246,18 @@ impl<'a> LoginManager<'a> {
             .unwrap_or(0)
             + pad_y * 2;
 
-        let power_hint_font = draw::Font::new(
-            power.font.as_deref().unwrap_or(&fonts.main),
-            power.hint_size_px.unwrap_or(power.size_px * 0.7)
-        );
+        let hint_spec = settings.power_hint_font();
+        let power_hint_font =
+            draw::Font::new(&hint_spec.family, hint_spec.size);
         let power_hint_size =
             power_hint_font.measure(power::HINT).unwrap_or_else(|e| {
                 warn!("Unable to measure power hint; not drawing it: {e}");
                 (0, 0)
             });
 
-        let (status_font, status_h) = if status.show {
-            let font = draw::Font::new(
-                status.font.as_deref().unwrap_or(&fonts.main),
-                status.size_px
-            );
+        let (status_font, status_h) = if settings.status.enabled {
+            let spec = settings.status_font();
+            let font = draw::Font::new(&spec.family, spec.size);
             match font.measure("Ag") {
                 Ok((_, h)) => (Some(font), h),
                 Err(e) => {
@@ -276,49 +269,50 @@ impl<'a> LoginManager<'a> {
             (None, 0)
         };
 
-        let main_font = draw::Font::new(&fonts.main, fonts.main_size_px);
-        let icon_font = draw::Font::new(
-            ui.icon_font.as_deref().unwrap_or(&fonts.main),
-            fonts.main_size_px
-        );
+        let main_spec = settings.form_font();
+        let main_font = draw::Font::new(&main_spec.family, main_spec.size);
+        let icon_spec = settings.icon_font();
+        let icon_font = draw::Font::new(&icon_spec.family, icon_spec.size);
+        let heading_spec = settings.header_font();
+        let heading_font =
+            draw::Font::new(&heading_spec.family, heading_spec.size);
         let mut lm = Self {
             buf: &mut fb.frame,
             device: &fb.device,
-            heading_font: draw::Font::new(&fonts.heading, fonts.heading_size_px),
+            heading_font,
             main_font,
             icon_font,
             field_icons: field_icon::FieldIcons::default(),
             colors,
-            header: template::Template::parse(&header.text),
+            header: template::Template::parse(&settings.header.text),
             power_font,
             power_items,
             power_item_h,
-            power_gap_px: power.gap_px,
-            power_offset_y_px: power.offset_y_px,
+            power_gap: power.gap,
+            power_offset: power.offset,
             power_armed: None,
             power_hint_font,
             power_hint_size,
-            power_hint_offset_y_px: power.hint_offset_y_px,
+            power_hint_offset: power.hint.offset,
             status_font,
             status_h,
-            status_offset_y_px: status.offset_y_px,
+            status_offset: settings.status.offset,
             status: None,
             forced_username,
             lock_target,
-            hide_target: ui.hide_target,
-            hide_username: ui.hide_username,
-            gap_below_session_px: ui.gap_below_session_px,
-            gap_below_username_px: ui.gap_below_username_px,
-            row_h: ui.row_h,
-            password_char,
-            text_align: ui.text_align,
-            input_margin_px: ui.input_margin_px,
-            heading_offset_y_px: ui.heading_offset_y_px,
-            blackout_on_success: ui.blackout_on_success,
+            lock_username,
+            session_gap_below: form.session.gap_below,
+            username_gap_below: form.username.gap_below,
+            row_h: form.row_height,
+            password_mask,
+            text_align: form.text_align,
+            form_padding: form.padding,
+            header_offset: settings.header.offset,
+            clear_screen_on_success: settings.login.clear_screen_on_success,
             session_left_arrow,
             session_right_arrow,
             screen_size,
-            dimensions,
+            form_width: form.width,
             mode,
             greetd,
             targets,
@@ -328,9 +322,9 @@ impl<'a> LoginManager<'a> {
         };
 
         lm.field_icons = field_icon::resolve(
-            &ui.username_icon,
-            &ui.password_icon,
-            ui.icon_gap_px,
+            &form.username.icon,
+            &form.password.icon,
+            form.icons.gap,
             &lm.icon_font,
             &lm.main_font,
             lm.show_username_row()
@@ -339,12 +333,12 @@ impl<'a> LoginManager<'a> {
             let form = lm.form_layout();
             let with = layout::field_columns(
                 form.w,
-                lm.input_margin_px,
+                lm.form_padding,
                 lm.field_icons.col_w,
                 lm.text_align
             );
             let without =
-                layout::field_columns(form.w, lm.input_margin_px, 0, lm.text_align);
+                layout::field_columns(form.w, lm.form_padding, 0, lm.text_align);
             if with.text_w < without.text_w / 2 {
                 warn!("Field icons leave less than half the field for text; not drawing them");
                 lm.field_icons = field_icon::FieldIcons::default();
@@ -358,7 +352,7 @@ impl<'a> LoginManager<'a> {
             (lm.status_layout(), lm.power_row_layout())
         {
             if status_y + status_h > row.y {
-                warn!("Status line overlaps the power row; raise power.offset_y_px");
+                warn!("Status line overlaps the power row; raise power.offset");
             }
         }
 
@@ -370,19 +364,11 @@ impl<'a> LoginManager<'a> {
     }
 
     pub(crate) fn show_target_row(&self) -> bool {
-        if self.lock_target {
-            !self.hide_target
-        } else {
-            true
-        }
+        !self.lock_target
     }
 
     pub(crate) fn show_username_row(&self) -> bool {
-        if self.forced_username.is_some() {
-            !self.hide_username
-        } else {
-            true
-        }
+        !self.lock_username
     }
 }
 
@@ -485,20 +471,14 @@ fn main() {
     let mut lm = LoginManager::new(
         &mut framebuffer,
         (w, h),
-        (settings.ui.form_width, settings.ui.form_height),
         greetd,
         targets,
-        &settings.fonts,
-        colors,
-        &settings.login,
-        &settings.header,
-        &settings.power,
-        &settings.status,
-        &settings.ui,
+        &settings,
+        colors
     );
 
     lm.clear();
-    let bg = lm.colors.neutral;
+    let bg = lm.colors.muted;
     if let Err(e) = lm.draw_bg(&bg) {
         error!("Unable to draw background: {e}");
         let _ = Framebuffer::set_kd_mode(KdMode::Text);

@@ -141,7 +141,10 @@ pub fn resolve(cfg: &[settings::PowerAction]) -> Vec<Action> {
         let kind = match Kind::from_name(&entry.kind) {
             Some(kind) => kind,
             None => {
-                warn!("Skipping power.action[{i}]: unknown kind {:?}", entry.kind);
+                warn!(
+                    "Skipping power.actions[{i}]: unknown kind {:?}",
+                    entry.kind
+                );
                 continue;
             }
         };
@@ -149,14 +152,14 @@ pub fn resolve(cfg: &[settings::PowerAction]) -> Vec<Action> {
             Some(key) => key,
             None => {
                 warn!(
-                    "Skipping power.action[{i}]: key must be F1-F12, got {:?}",
+                    "Skipping power.actions[{i}]: key must be F1-F12, got {:?}",
                     entry.key
                 );
                 continue;
             }
         };
         if actions.iter().any(|a| a.key == key) {
-            warn!("Skipping power.action[{i}]: F{key} is already bound");
+            warn!("Skipping power.actions[{i}]: F{key} is already bound");
             continue;
         }
         let command = entry
@@ -164,7 +167,7 @@ pub fn resolve(cfg: &[settings::PowerAction]) -> Vec<Action> {
             .clone()
             .unwrap_or_else(|| kind.default_command());
         if command.first().map_or(true, |c| c.trim().is_empty()) {
-            warn!("Skipping power.action[{i}]: empty command");
+            warn!("Skipping power.actions[{i}]: empty command");
             continue;
         }
         actions.push(Action {

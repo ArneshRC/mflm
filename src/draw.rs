@@ -225,10 +225,10 @@ impl crate::LoginManager<'_> {
         let layout = self.form_layout();
         let mut buf = crate::buffer::Buffer::new(self.buf, self.screen_size);
         let bg = self.colors.background;
-        let fg = self.colors.foreground;
+        let fg = self.colors.text;
 
         let form_fill =
-            if box_color.as_argb8888() == self.colors.neutral.as_argb8888() {
+            if box_color.as_argb8888() == self.colors.muted.as_argb8888() {
                 bg
             } else {
                 *box_color
@@ -247,7 +247,7 @@ impl crate::LoginManager<'_> {
         let heading = self.header.render()?;
 
         self.heading_font.auto_draw_text_centered(
-            &mut buf.offset((0, self.heading_offset_y_px))?,
+            &mut buf.offset((0, self.header_offset))?,
             &bg,
             &fg,
             &heading
@@ -262,9 +262,9 @@ impl crate::LoginManager<'_> {
                 layout.row_h
             ))?;
             let c = if self.mode == crate::Mode::EditingUsername {
-                self.colors.selected
+                self.colors.accent
             } else {
-                self.colors.neutral
+                self.colors.muted
             };
             Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
         }
@@ -277,9 +277,9 @@ impl crate::LoginManager<'_> {
                 layout.row_h
             ))?;
             let c = if self.mode == crate::Mode::EditingPassword {
-                self.colors.selected
+                self.colors.accent
             } else {
-                self.colors.neutral
+                self.colors.muted
             };
             Self::draw_underline(&mut row, layout.w, layout.row_h, &c);
         }
@@ -304,7 +304,7 @@ impl crate::LoginManager<'_> {
             let (bg, fg) = if self.power_armed == Some(i) {
                 (self.colors.confirm, self.colors.background)
             } else {
-                (self.colors.background, self.colors.foreground)
+                (self.colors.background, self.colors.text)
             };
 
             let mut cell = buf.subdimensions((x, layout.y, item.w, layout.h))?;
@@ -334,7 +334,7 @@ impl crate::LoginManager<'_> {
                 let x = center
                     .saturating_sub(hint_w / 2)
                     .min(self.screen_size.0 - hint_w);
-                let fg = self.colors.neutral;
+                let fg = self.colors.muted;
                 self.power_hint_font.auto_draw_text_centered(
                     &mut buf.subdimensions((x, hint_y, hint_w, hint_h))?,
                     &bg,
@@ -361,7 +361,7 @@ impl crate::LoginManager<'_> {
         line.memset(&bg);
 
         let (fg, text) = match &self.status {
-            Some(crate::Status::Info(text)) => (self.colors.neutral, text),
+            Some(crate::Status::Info(text)) => (self.colors.muted, text),
             Some(crate::Status::Error(text)) => (self.colors.error, text),
             None => {
                 self.should_refresh = true;
@@ -391,9 +391,9 @@ impl crate::LoginManager<'_> {
         buf.memset(&bg);
 
         let fg = if self.mode == crate::Mode::SelectingSession {
-            self.colors.selected
+            self.colors.accent
         } else {
-            self.colors.foreground
+            self.colors.text
         };
 
         let (left, right) =
@@ -454,7 +454,7 @@ impl crate::LoginManager<'_> {
 
         let mut stars = String::new();
         for _ in 0..password.chars().count() {
-            stars.push_str(&self.password_char);
+            stars.push_str(&self.password_mask);
         }
 
         let focused = self.mode == crate::Mode::EditingPassword;
@@ -483,15 +483,15 @@ impl crate::LoginManager<'_> {
         }
 
         let fg = if focused {
-            self.colors.selected
+            self.colors.accent
         } else {
-            self.colors.foreground
+            self.colors.text
         };
         // the icon is a label, so it follows the underline, not the text
         let border = if focused {
-            self.colors.selected
+            self.colors.accent
         } else {
-            self.colors.neutral
+            self.colors.muted
         };
 
         let align = match self.text_align {
@@ -502,7 +502,7 @@ impl crate::LoginManager<'_> {
 
         let cols = crate::layout::field_columns(
             layout.w,
-            self.input_margin_px,
+            self.form_padding,
             self.field_icons.col_w,
             self.text_align
         );

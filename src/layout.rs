@@ -32,14 +32,14 @@ impl crate::LoginManager<'_> {
         let y = form
             .y
             .checked_add(form.total_h)?
-            .checked_add(self.power_offset_y_px)?;
+            .checked_add(self.power_offset)?;
         let h = self.power_item_h;
         if y.checked_add(h)? > self.screen_size.1 {
             return None;
         }
 
         let gaps = self
-            .power_gap_px
+            .power_gap
             .checked_mul(self.power_items.len() as u32 - 1)?;
         let total_w = self
             .power_items
@@ -55,13 +55,13 @@ impl crate::LoginManager<'_> {
             .iter()
             .map(|item| {
                 let out = x;
-                x += item.w + self.power_gap_px;
+                x += item.w + self.power_gap;
                 out
             })
             .collect();
 
         let hint_y = (y + h)
-            .checked_add(self.power_hint_offset_y_px)
+            .checked_add(self.power_hint_offset)
             .filter(|hint_y| {
                 self.power_hint_size.1 > 0
                     && hint_y.checked_add(self.power_hint_size.1)
@@ -79,7 +79,7 @@ impl crate::LoginManager<'_> {
         let y = form
             .y
             .checked_add(form.total_h)?
-            .checked_add(self.status_offset_y_px)?;
+            .checked_add(self.status_offset)?;
         if y.checked_add(self.status_h)? > self.screen_size.1 {
             return None;
         }
@@ -88,8 +88,8 @@ impl crate::LoginManager<'_> {
 
     pub(crate) fn form_layout(&self) -> FormLayout {
         let row_h = self.row_h;
-        let gap_below_session_px = self.gap_below_session_px;
-        let gap_below_username_px = self.gap_below_username_px;
+        let session_gap_below = self.session_gap_below;
+        let username_gap_below = self.username_gap_below;
 
         let show_session = self.show_target_row();
         let show_username = self.show_username_row();
@@ -99,10 +99,10 @@ impl crate::LoginManager<'_> {
         let gaps_h = {
             let mut sum = 0u32;
             if show_session {
-                sum = sum.saturating_add(gap_below_session_px);
+                sum = sum.saturating_add(session_gap_below);
             }
             if show_username {
-                sum = sum.saturating_add(gap_below_username_px);
+                sum = sum.saturating_add(username_gap_below);
             }
             sum
         };
@@ -111,7 +111,7 @@ impl crate::LoginManager<'_> {
 
         let margin_x = 32;
         let max_w = self.screen_size.0.saturating_sub(margin_x * 2).max(1);
-        let w = self.dimensions.0.min(max_w).max(1);
+        let w = self.form_width.min(max_w).max(1);
 
         let x = (self.screen_size.0.saturating_sub(w)) / 2;
         let y = (self.screen_size.1.saturating_sub(total_h)) / 2;
@@ -119,7 +119,7 @@ impl crate::LoginManager<'_> {
         let mut cur_y = y;
         let session_y = if show_session {
             let out = cur_y;
-            cur_y = cur_y.saturating_add(row_h + gap_below_session_px);
+            cur_y = cur_y.saturating_add(row_h + session_gap_below);
             Some(out)
         } else {
             None
@@ -127,7 +127,7 @@ impl crate::LoginManager<'_> {
 
         let username_y = if show_username {
             let out = cur_y;
-            cur_y = cur_y.saturating_add(row_h + gap_below_username_px);
+            cur_y = cur_y.saturating_add(row_h + username_gap_below);
             Some(out)
         } else {
             None

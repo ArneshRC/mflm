@@ -2,60 +2,79 @@ use serde::Deserialize;
 
 use crate::color::{Color, ParseColorError};
 
-#[derive(Debug, Clone, Deserialize)]
+/// `{ family, size }`. Missing keys fall back to the element's parent font,
+/// see the `*_font` methods on `Settings`.
+#[derive(Default, Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct Fonts {
-    /// Pango font description string for the main UI font (used for session/user/pass rows).
-    /// Example: "DejaVu Sans Mono" or "Sans".
-    pub main: String,
-
-    /// Pango font description string for the heading UI font.
-    /// Example: "Sans Bold".
-    pub heading: String,
-
-    /// Font size for main UI text (pixels).
-    pub main_size_px: f32,
-
-    /// Font size for heading UI text (pixels).
-    pub heading_size_px: f32
+pub struct Font {
+    /// Pango font description, e.g. "DejaVu Sans Mono" or "Sans Bold".
+    pub family: Option<String>,
+    /// Pixels.
+    pub size: Option<f32>
 }
 
-impl Default for Fonts {
-    fn default() -> Self {
-        Self {
-            main: "Monospace".to_string(),
-            heading: "Sans".to_string(),
-            main_size_px: 42.0,
-            heading_size_px: 72.0
+#[derive(Debug, Clone)]
+pub struct ResolvedFont {
+    pub family: String,
+    pub size: f32
+}
+
+impl Font {
+    fn resolve(&self, family: &str, size: f32) -> ResolvedFont {
+        ResolvedFont {
+            family: self.family.as_deref().unwrap_or(family).to_string(),
+            size: self.size.unwrap_or(size)
         }
     }
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
+pub struct Login {
+    /// Blank the screen once login succeeds.
+    pub clear_screen_on_success: bool
+}
+
+impl Default for Login {
+    fn default() -> Self {
+        Self {
+            clear_screen_on_success: true
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Theme {
+    /// Default font for everything. Defaults to Monospace, 42px.
+    pub font: Font,
+    pub colors: Colors
+}
+
+/// Hex: "#RRGGBB" or "#AARRGGBB".
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Colors {
-    /// Hex: "#RRGGBB" or "#AARRGGBB".
-    pub foreground: String,
-    /// Hex: "#RRGGBB" or "#AARRGGBB".
+    pub text: String,
     pub background: String,
-    /// Used for the default box and other neutral UI.
-    pub neutral: String,
-    /// Used for selections / active fields / in-progress actions.
-    pub selected: String,
-    /// Used for errors (e.g. auth failure).
+    /// Unfocused underlines, info status and the power hint.
+    pub muted: String,
+    /// Focused field and active session.
+    pub accent: String,
+    /// Errors (e.g. auth failure).
     pub error: String,
     /// Background of a power action awaiting confirmation. Defaults to
-    /// `selected`.
+    /// `accent`.
     pub confirm: Option<String>
 }
 
 impl Default for Colors {
     fn default() -> Self {
         Self {
-            foreground: "#fafafa".to_string(),
+            text: "#fafafa".to_string(),
             background: "#000000".to_string(),
-            neutral: "#cccccc".to_string(),
-            selected: "#aaccee".to_string(),
+            muted: "#cccccc".to_string(),
+            accent: "#aaccee".to_string(),
             error: "#ecbcad".to_string(),
             confirm: None
         }
@@ -64,41 +83,181 @@ impl Default for Colors {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ResolvedColors {
-    pub foreground: Color,
+    pub text: Color,
     pub background: Color,
-    pub neutral: Color,
-    pub selected: Color,
+    pub muted: Color,
+    pub accent: Color,
     pub error: Color,
     pub confirm: Color
-}
-
-#[derive(Default, Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct Login {
-    /// Optional session target name to force.
-    pub target: Option<String>,
-
-    /// Optional username to force.
-    pub username: Option<String>
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Header {
-    /// Heading text. Supports placeholders: {hostname}. Use {{ and }} for
-    /// literal braces.
-    pub text: String
+    /// Supports placeholders: {hostname}. Use {{ and }} for literal braces.
+    pub text: String,
+    /// Defaults to Sans, 72px.
+    pub font: Font,
+    /// Gap between the top of the screen and the heading.
+    pub offset: u32
 }
 
 impl Default for Header {
     fn default() -> Self {
         Self {
-            text: "Welcome to {hostname}".to_string()
+            text: "Welcome to {hostname}".to_string(),
+            font: Font::default(),
+            offset: 24
         }
     }
 }
 
-/// One entry of `[[power.action]]`. Fields are loosely typed so a bad entry
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TextAlign {
+    Left,
+    Center,
+    Right
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Form {
+    pub width: u32,
+    pub row_height: u32,
+    pub text_align: TextAlign,
+    /// Horizontal inset of the text in a row.
+    pub padding: u32,
+    /// Defaults to `theme.font`.
+    pub font: Font,
+    pub icons: Icons,
+    pub session: Session,
+    pub username: Username,
+    pub password: Password
+}
+
+impl Default for Form {
+    fn default() -> Self {
+        Self {
+            width: 512,
+            row_height: 72,
+            text_align: TextAlign::Center,
+            padding: 15,
+            font: Font::default(),
+            icons: Icons::default(),
+            session: Session::default(),
+            username: Username::default(),
+            password: Password::default()
+        }
+    }
+}
+
+/// Shared settings for the username and password icons.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Icons {
+    /// Defaults to `form.font`.
+    pub font: Font,
+    /// Gap between an icon and its field's text.
+    pub gap: u32
+}
+
+impl Default for Icons {
+    fn default() -> Self {
+        Self {
+            font: Font::default(),
+            gap: 24
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Session {
+    /// Session name to preselect.
+    pub default: Option<String>,
+    /// Hide the row and always use `default`.
+    pub locked: bool,
+    /// Left and right arrow around the session name.
+    pub arrows: [String; 2],
+    pub gap_below: u32
+}
+
+impl Default for Session {
+    fn default() -> Self {
+        Self {
+            default: None,
+            locked: false,
+            arrows: ["❮".to_string(), "❯".to_string()],
+            gap_below: 64
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Username {
+    /// Username to prefill.
+    pub default: Option<String>,
+    /// Hide the row and always use `default`.
+    pub locked: bool,
+    /// Usually a Nerd Font glyph such as "". Empty means no icon.
+    pub icon: String,
+    pub gap_below: u32
+}
+
+impl Default for Username {
+    fn default() -> Self {
+        Self {
+            default: None,
+            locked: false,
+            icon: String::new(),
+            gap_below: 32
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Password {
+    /// E.g. "". Empty means no icon.
+    pub icon: String,
+    /// Drawn once per typed character.
+    pub mask: String
+}
+
+impl Default for Password {
+    fn default() -> Self {
+        Self {
+            icon: String::new(),
+            mask: "•".to_string()
+        }
+    }
+}
+
+/// Line below the form showing "Logging in…", "Login failed" and similar.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct Status {
+    /// When false, errors flash the form in the error color instead.
+    pub enabled: bool,
+    /// Defaults to `theme.font` at 18px.
+    pub font: Font,
+    /// Gap between the bottom of the form and the line.
+    pub offset: u32
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            font: Font::default(),
+            offset: 48
+        }
+    }
+}
+
+/// One entry of `[[power.actions]]`. Fields are loosely typed so a bad entry
 /// is skipped (see `power::resolve`) instead of failing the whole config.
 #[derive(Default, Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -118,117 +277,44 @@ pub struct PowerAction {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Power {
-    /// Pango font description. Defaults to `fonts.main`.
-    pub font: Option<String>,
-    pub size_px: f32,
+    /// Defaults to `theme.font` at 18px.
+    pub font: Font,
     /// Horizontal gap between actions.
-    pub gap_px: u32,
+    pub gap: u32,
     /// Gap between the bottom of the form and the row.
-    pub offset_y_px: u32,
-    /// Size of the "[Enter] Accept / [Esc] Cancel" hint under an armed
-    /// action. Defaults to 70% of `size_px`.
-    pub hint_size_px: Option<f32>,
-    /// Gap between the row and the hint.
-    pub hint_offset_y_px: u32,
+    pub offset: u32,
+    pub hint: PowerHint,
     /// Actions in on-screen order. Empty means no power row.
-    pub action: Vec<PowerAction>
+    pub actions: Vec<PowerAction>
 }
 
 impl Default for Power {
     fn default() -> Self {
         Self {
-            font: None,
-            size_px: 18.0,
-            gap_px: 32,
-            offset_y_px: 240,
-            hint_size_px: None,
-            hint_offset_y_px: 8,
-            action: Vec::new()
+            font: Font::default(),
+            gap: 32,
+            offset: 240,
+            hint: PowerHint::default(),
+            actions: Vec::new()
         }
     }
 }
 
-/// Line below the form showing "Logging in…", "Login failed" and similar.
+/// "[Enter] Accept / [Esc] Cancel" under an armed action.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct Status {
-    /// When false, errors flash the form in the error color instead.
-    pub show: bool,
-    /// Pango font description. Defaults to `fonts.main`.
-    pub font: Option<String>,
-    pub size_px: f32,
-    /// Gap between the bottom of the form and the line.
-    pub offset_y_px: u32
+pub struct PowerHint {
+    /// Defaults to `power.font` at 70% of its size.
+    pub font: Font,
+    /// Gap between the power row and the hint.
+    pub offset: u32
 }
 
-impl Default for Status {
+impl Default for PowerHint {
     fn default() -> Self {
         Self {
-            show: true,
-            font: None,
-            size_px: 18.0,
-            offset_y_px: 48
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TextAlign {
-    Left,
-    Center,
-    Right
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(default)]
-pub struct Ui {
-    pub hide_target: bool,
-    pub hide_username: bool,
-    pub gap_below_session_px: u32,
-    pub gap_below_username_px: u32,
-    pub row_h: u32,
-    pub password_char: String,
-    pub text_align: TextAlign,
-    pub input_margin_px: u32,
-    pub heading_offset_y_px: u32,
-    pub blackout_on_success: bool,
-    pub form_width: u32,
-    pub form_height: u32,
-    pub session_left_arrow: String,
-    pub session_right_arrow: String,
-    /// Shown left of the username, usually a Nerd Font glyph such as
-    /// "". Empty means no icon.
-    pub username_icon: String,
-    /// Shown left of the password, e.g. "". Empty means no icon.
-    pub password_icon: String,
-    /// Pango font description for the icons. Defaults to `fonts.main`.
-    pub icon_font: Option<String>,
-    /// Gap between an icon and its field's text.
-    pub icon_gap_px: u32
-}
-
-impl Default for Ui {
-    fn default() -> Self {
-        Self {
-            hide_target: false,
-            hide_username: false,
-            gap_below_session_px: 64,
-            gap_below_username_px: 32,
-            row_h: 72,
-            password_char: "•".to_string(),
-            text_align: TextAlign::Center,
-            input_margin_px: 15,
-            heading_offset_y_px: 24,
-            blackout_on_success: true,
-            form_width: 512,
-            form_height: 168,
-            session_left_arrow: "❮".to_string(),
-            session_right_arrow: "❯".to_string(),
-            username_icon: String::new(),
-            password_icon: String::new(),
-            icon_font: None,
-            icon_gap_px: 24
+            font: Font::default(),
+            offset: 8
         }
     }
 }
@@ -236,43 +322,147 @@ impl Default for Ui {
 #[derive(Default, Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    pub fonts: Fonts,
-    pub colors: Colors,
     pub login: Login,
+    pub theme: Theme,
     pub header: Header,
-    pub power: Power,
+    pub form: Form,
     pub status: Status,
-    pub ui: Ui
+    pub power: Power
 }
 
 impl Settings {
     /// Loads configuration from /etc/mflm/config.toml. Missing keys fall back
     /// to the `Default` impls above.
     pub fn load() -> Result<Self, config::ConfigError> {
-        config::Config::builder()
-            .add_source(
-                config::File::from(std::path::Path::new(
-                    "/etc/mflm/config.toml"
-                ))
+        Self::from_source(
+            config::File::from(std::path::Path::new("/etc/mflm/config.toml"))
                 .format(config::FileFormat::Toml)
                 .required(false)
-            )
+        )
+    }
+
+    fn from_source<S>(source: S) -> Result<Self, config::ConfigError>
+    where
+        S: config::Source + Send + Sync + 'static
+    {
+        config::Config::builder()
+            .add_source(source)
             .build()?
             .try_deserialize::<Self>()
     }
 
+    pub fn theme_font(&self) -> ResolvedFont {
+        self.theme.font.resolve("Monospace", 42.0)
+    }
+
+    pub fn header_font(&self) -> ResolvedFont {
+        self.header.font.resolve("Sans", 72.0)
+    }
+
+    pub fn form_font(&self) -> ResolvedFont {
+        let theme = self.theme_font();
+        self.form.font.resolve(&theme.family, theme.size)
+    }
+
+    pub fn icon_font(&self) -> ResolvedFont {
+        let form = self.form_font();
+        self.form.icons.font.resolve(&form.family, form.size)
+    }
+
+    pub fn status_font(&self) -> ResolvedFont {
+        self.status.font.resolve(&self.theme_font().family, 18.0)
+    }
+
+    pub fn power_font(&self) -> ResolvedFont {
+        self.power.font.resolve(&self.theme_font().family, 18.0)
+    }
+
+    pub fn power_hint_font(&self) -> ResolvedFont {
+        let power = self.power_font();
+        self.power.hint.font.resolve(&power.family, power.size * 0.7)
+    }
+
     pub fn resolve_colors(&self) -> Result<ResolvedColors, ParseColorError> {
-        let selected = Color::from_hex(&self.colors.selected)?;
+        let colors = &self.theme.colors;
+        let accent = Color::from_hex(&colors.accent)?;
         Ok(ResolvedColors {
-            foreground: Color::from_hex(&self.colors.foreground)?,
-            background: Color::from_hex(&self.colors.background)?,
-            neutral: Color::from_hex(&self.colors.neutral)?,
-            selected,
-            error: Color::from_hex(&self.colors.error)?,
-            confirm: match &self.colors.confirm {
+            text: Color::from_hex(&colors.text)?,
+            background: Color::from_hex(&colors.background)?,
+            muted: Color::from_hex(&colors.muted)?,
+            accent,
+            error: Color::from_hex(&colors.error)?,
+            confirm: match &colors.confirm {
                 Some(c) => Color::from_hex(c)?,
-                None => selected
+                None => accent
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(toml: &str) -> Settings {
+        Settings::from_source(config::File::from_str(
+            toml,
+            config::FileFormat::Toml
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn fonts_inherit() {
+        let s = parse(
+            r#"
+            [theme]
+            font = { family = "Mono", size = 30 }
+            [header]
+            font = { family = "Muli" }
+            [form.icons]
+            font = { family = "Symbols" }
+            [power]
+            font = { size = 20 }
+            "#
+        );
+        assert_eq!(s.header_font().family, "Muli");
+        assert_eq!(s.header_font().size, 72.0);
+        assert_eq!(s.form_font().family, "Mono");
+        assert_eq!(s.icon_font().family, "Symbols");
+        assert_eq!(s.icon_font().size, 30.0);
+        assert_eq!(s.status_font().family, "Mono");
+        assert_eq!(s.status_font().size, 18.0);
+        assert_eq!(s.power_hint_font().family, "Mono");
+        assert_eq!(s.power_hint_font().size, 14.0);
+    }
+
+    #[test]
+    fn nested_sections() {
+        let s = parse(
+            r#"
+            [form.session]
+            default = "Niri"
+            locked = true
+            arrows = ["<", ">"]
+            [form.username]
+            default = "me"
+            [form.password]
+            mask = "*"
+            [power.hint]
+            offset = 4
+            [[power.actions]]
+            kind = "reboot"
+            key = "F2"
+            "#
+        );
+        assert_eq!(s.form.session.default.as_deref(), Some("Niri"));
+        assert!(s.form.session.locked);
+        assert_eq!(s.form.session.arrows[1], ">");
+        assert_eq!(s.form.session.gap_below, 64);
+        assert_eq!(s.form.username.default.as_deref(), Some("me"));
+        assert!(!s.form.username.locked);
+        assert_eq!(s.form.password.mask, "*");
+        assert_eq!(s.power.hint.offset, 4);
+        assert_eq!(s.power.actions[0].key, "F2");
     }
 }

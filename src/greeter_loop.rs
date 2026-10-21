@@ -153,7 +153,7 @@ impl crate::LoginManager<'_> {
                 last_power_armed = self.power_armed;
             }
             if last_mode != self.mode {
-                let bg = self.colors.neutral;
+                let bg = self.colors.muted;
                 if let Err(e) = self.draw_bg(&bg) {
                     error!("Fatal: unable to draw background: {e}");
                     return;
@@ -179,7 +179,7 @@ impl crate::LoginManager<'_> {
 
             if needs_redraw {
                 self.clear();
-                let bg = self.colors.neutral;
+                let bg = self.colors.muted;
                 if let Err(e) = self.draw_bg(&bg) {
                     error!("Fatal: unable to draw background: {e}");
                     return;
@@ -340,7 +340,7 @@ impl crate::LoginManager<'_> {
                                         "Login succeeded; exiting greeter loop"
                                     );
 
-                                    if self.blackout_on_success {
+                                    if self.clear_screen_on_success {
                                         let mut buf = crate::buffer::Buffer::new(
                                             self.buf,
                                             self.screen_size
