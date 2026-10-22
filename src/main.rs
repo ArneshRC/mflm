@@ -205,7 +205,7 @@ impl<'a> LoginManager<'a> {
         }
 
         let lock_username = forced_username.is_some() && form.username.locked;
-        let mode = if lock_username {
+        let mode = if forced_username.is_some() {
             Mode::EditingPassword
         } else {
             Mode::EditingUsername
